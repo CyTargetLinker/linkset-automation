@@ -11,6 +11,10 @@ jobs:
       
       - name: Install dependencies with pip
         run: pip3 install gseapy requests mygene
-
+      - name: check ls
+        run: ls
       - name: Run preprocessing
-        run: python3 ../wikipathways/wp.py
+        
+        run: |
+          cd ..
+          python3 wikipathways/wp.py
