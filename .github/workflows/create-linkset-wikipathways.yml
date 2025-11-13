@@ -8,6 +8,9 @@ jobs:
 
       - name: Setup Python
         uses: actions/setup-python@v6.0.0
-                 
+      
+      - name: Install dependencies with pip
+        run: pip3 install gseapy requests mygene csv
+
       - name: Run preprocessing
         run: python3 wikipathways/wp.py
