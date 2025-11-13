@@ -1,5 +1,3 @@
-Name: Create linkset for wikipathways
-
 on:
   workflow_dispatch:
 
