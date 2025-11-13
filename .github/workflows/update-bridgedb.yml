@@ -1,0 +1,97 @@
+name: Weekly caching of bridge and linksetcreator
+
+on:
+  repository_dispatch: 
+    types: [bridgedb-data-update-event]
+  workflow_dispatch:
+  schedule:
+  - cron: "0 0 * * 0"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: false # to allow multiple runs to queue up rather than clobber
+
+jobs:
+  refresh-cache:
+    runs-on: ubuntu-latest
+    steps:
+    
+      - name: Checkout wikipathways-database repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          ref: main
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+            
+      - name: Cache linkset-creator with dependencies
+        uses: actions/cache@v4
+        id: cache-linkset-creator-jar
+        with:
+          path: ./linkset-creator-v2.0.jar
+          key: cached-linkset-creator-action-${{ hashFiles('linkset-creator-v2.0.jar') }}
+          restore-keys: |
+            cached-linkset-creator-action-${{ hashFiles('linkset-creator-v2.0.jar') }}
+            cached-linkset-creator-action-
+    
+      - name: Install deps
+        run: |
+          echo "Refreshing cached-linkset-creator-action"
+          if [ ! -e ./linkset-creator-v2.0.jar ]; then
+            wget -O linkset-creator-v2.0.jar https://github.com/CyTargetLinker/linksetCreator/releases/download/v2.0/linkset-creator-v2.0.jar
+          fi
+
+                
+      - name: Cache and install dependencies
+        uses: actions/cache@v4
+        id: cache
+        with:
+          path: ${{ github.workspace }}/bridgedb/Hs_Derby_Ensembl_111.bridge
+          key: ${{ runner.os }}-java-Hs_Derby_Ensembl_111
+          restore-keys: |
+            ${{ runner.os }}-java-Hs_Derby_Ensembl_111
+            ${{ runner.os }}-java-Hs_Derby_Ensembl_
+                
+      - if: steps.cache.outputs.cache-hit != 'true'
+        name: Install deps
+        run: |
+          mkdir -p "${{ github.workspace }}/bridgedb"
+          cd "${{ github.workspace }}/bridgedb"
+          if [ ! -e ./Hs_Derby_Ensembl_111.bridge ]; then
+            wget -O Hs_Derby_Ensembl_111.bridge https://zenodo.org/record/14779056/files/Hs_Derby_Ensembl_111.bridge?download=1
+          fi
+
+      - name: Generate gdb.config, fileNames.config, and fileDownloads.config
+        run: |
+          for f in ${{needs.changed-gpmls.outputs.added-modified}}; do
+            scripts/bridgedb/configGenerator.sh $f
+          done
+          
+      - name: Cache all bridge files
+        uses: actions/cache@v4
+        id: cacheAllBridge
+        with:
+          path: |
+            ./metabolites*.bridge
+            ./Dr*.bridge
+            ./Hs*.bridge
+            ./Mm*.bridge
+            ./Rn*.bridge
+          key: cached-bridge-files
+          restore-keys: |
+            cached-bridge-files
+            
+      - name: Install all bridge files
+        run: |
+          echo "Cache not found: cached-bridge-files"
+          declare -a OrganismNames=("Metabolites" "Danio rerio" "Homo sapiens" "Mus musculus" "Rattus norvegicus")
+          for org in "${OrganismNames[@]}"; do
+            echo "generating configuration files for "$org""
+            scripts/meta-data-action/configGenerator.sh "$org"
+            echo "installing bridgedb files for "$org""
+            scripts/meta-data-action/installDependencies.sh "$org"
+          done
