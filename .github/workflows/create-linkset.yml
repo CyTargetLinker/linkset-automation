@@ -1,0 +1,13 @@
+Name: Create linkset
+
+on:
+  workflow_dispatch:
+
+jobs:
+  refresh-cache:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Install deps
+        run: 
+          echo "test"
