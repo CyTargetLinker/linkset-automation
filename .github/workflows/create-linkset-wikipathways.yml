@@ -10,4 +10,4 @@ jobs:
         uses: actions/setup-python@v6.0.0
                  
       - name: Run preprocessing
-        run: pyhton3 ./wikipathways/wp.py
+        run: python3 ./wikipathways/wp.py
