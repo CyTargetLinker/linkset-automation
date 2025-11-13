@@ -1,0 +1,15 @@
+Name: Create linkset for wikipathways
+
+on:
+  workflow_dispatch:
+
+jobs:
+  refresh-cache:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Setup Python
+        uses: actions/setup-python@v6.0.0
+                 
+      - name: Run preprocessing
+        run: pyhton3 ./wikipathways/wp.py
