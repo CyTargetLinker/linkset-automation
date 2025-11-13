@@ -13,4 +13,4 @@ jobs:
         run: pip3 install gseapy requests mygene
 
       - name: Run preprocessing
-        run: python3 wikipathways/wp.py
+        run: python3 ../wikipathways/wp.py
