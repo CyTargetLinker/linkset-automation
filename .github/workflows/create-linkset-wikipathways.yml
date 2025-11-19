@@ -18,6 +18,5 @@ jobs:
       - name: Run preprocessing
         
         run: |
-          cd ..
           python3 wikipathways/wp.py
  
