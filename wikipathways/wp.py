@@ -42,16 +42,8 @@ with open("input.txt", "w", newline="", encoding="utf-8") as f:
         version = parts[1]  # "WikiPathways_20251110"
         pathway_id = parts[2]  # "WP5205"
         species = parts[3]  # "Homo sapiens"
-
-        mg = mygene.MyGeneInfo()
-        results = mg.querymany(
-            genes, scopes="entrezgene", fields="symbol", species="human"
-        )
-        id_to_symbol = {str(r["query"]): r.get("symbol", "N/A") for r in results}
-
+        
         for gene in genes:
-            symbol = id_to_symbol.get(gene, gene)
-            gene_name = symbol if symbol != "N/A" else gene
             writer.writerow(
-                [p_name, pathway_id, len(genes), gene, gene_name, version, species]
+                [p_name, pathway_id, len(genes), gene, gene, version, species]
             )
