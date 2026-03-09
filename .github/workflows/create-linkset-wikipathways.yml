@@ -38,3 +38,7 @@ jobs:
             -c wikipathways/wp.config \
             -i input.txt \
             -o wikipathways.xgmml
+            
+      - name: check ls
+        run: ls
+        
