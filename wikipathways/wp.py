@@ -1,6 +1,7 @@
 import csv
 
 import gseapy as gp
+import requests
 
 # gmt version
 version = "20251110"
