@@ -30,7 +30,7 @@ jobs:
         run: python3 wikipathways/wp.py
         
       - name: check ls
-        run: ls
+        run: ls -la
         
       - name: Create Linkset XGMML file
         run: |
@@ -40,5 +40,5 @@ jobs:
             -o wikipathways.xgmml
             
       - name: check ls
-        run: ls
+        run: ls -la
         
