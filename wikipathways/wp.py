@@ -1,8 +1,6 @@
 import csv
 
 import gseapy as gp
-import mygene
-import requests
 
 # gmt version
 version = "20251110"
