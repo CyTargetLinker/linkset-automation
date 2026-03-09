@@ -5,7 +5,9 @@ jobs:
   use-cached-files:
     runs-on: ubuntu-latest
     steps:
-
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        
       - name: Restore linkset-creator jar from cache
         uses: actions/cache@v4
         with:
@@ -17,9 +19,6 @@ jobs:
         with:
           path: ${{ github.workspace }}/bridgedb/Hs_Derby_Ensembl_111.bridge
           key: ${{ runner.os }}-Hs_Derby_Ensembl_111
-
-      - name: Checkout repo
-        uses: actions/checkout@v4
 
       - name: Setup Python
         uses: actions/setup-python@v5
