@@ -5,20 +5,36 @@ jobs:
   use-cached-files:
     runs-on: ubuntu-latest
     steps:
+
       - name: Checkout repo
         uses: actions/checkout@v4
-        
+
       - name: Restore linkset-creator jar from cache
         uses: actions/cache@v4
+        id: cache-jar
         with:
           path: ./linkset-creator-v2.0.jar
           key: cached-linkset-creator-v2.0-jar
 
+      - name: Download linkset-creator jar if cache missed
+        if: steps.cache-jar.outputs.cache-hit != 'true'
+        run: |
+          wget -O linkset-creator-v2.0.jar \
+            https://github.com/CyTargetLinker/linksetCreator/releases/download/v2.0/linkset-creator-v2.0.jar
+
       - name: Restore BridgeDb file from cache
         uses: actions/cache@v4
+        id: cache-bridgedb
         with:
           path: ${{ github.workspace }}/bridgedb/Hs_Derby_Ensembl_111.bridge
           key: ${{ runner.os }}-Hs_Derby_Ensembl_111
+
+      - name: Download BridgeDb file if cache missed
+        if: steps.cache-bridgedb.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p "${{ github.workspace }}/bridgedb"
+          wget -O "${{ github.workspace }}/bridgedb/Hs_Derby_Ensembl_111.bridge" \
+            "https://zenodo.org/record/14779056/files/Hs_Derby_Ensembl_111.bridge?download=1"
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -28,22 +44,132 @@ jobs:
 
       - name: Run preprocessing
         run: python3 wikipathways/wp.py
-        
-      - name: check ls
+
+      - name: Check ls
         run: ls -la
-        
+
       - name: Create Linkset XGMML file
         run: |
           java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
             -c wikipathways/wp.config \
             -i input.txt \
             -o wikipathways.xgmml
-            
-      - name: check ls
+
+      - name: Check ls
         run: ls -la
-        
+
       - name: Upload linkset artifact
         uses: actions/upload-artifact@v4
         with:
           name: wikipathways-linkset
           path: wikipathways.xgmml
+
+      - name: Install curl and jq
+        run: sudo apt-get install -y curl jq
+
+      - name: Discard Current Draft
+        run: |
+          discard_response=$(curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "https://zenodo.org/api/deposit/depositions/${{ secrets.ZENODO_DEPOSITION_ID }}/actions/discard")
+          echo "Discard Response: $discard_response"
+          # Non-fatal: no existing draft is fine, so we do not exit on failure here
+
+      - name: Create a New Version of the Deposition
+        id: new_version
+        run: |
+          response=$(curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "https://zenodo.org/api/deposit/depositions/${{ secrets.ZENODO_DEPOSITION_ID }}/actions/newversion")
+          echo "Response: $response"
+
+          new_draft_url=$(echo "$response" | jq -r '.links.latest_draft')
+          if [[ "$new_draft_url" == "null" || -z "$new_draft_url" ]]; then
+            echo "Failed to retrieve the latest draft URL. Response was: $response"
+            exit 1
+          fi
+
+          new_draft_response=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "$new_draft_url")
+          echo "New Draft Response: $new_draft_response"
+
+          new_deposition_id=$(echo "$new_draft_response" | jq -r '.id')
+          new_bucket_url=$(echo "$new_draft_response" | jq -r '.links.bucket')
+
+          if [[ "$new_deposition_id" == "null" || -z "$new_deposition_id" ]]; then
+            echo "Failed to retrieve the new deposition ID. Response was: $new_draft_response"
+            exit 1
+          fi
+
+          echo "New Deposition ID: $new_deposition_id"
+          echo "New Bucket URL: $new_bucket_url"
+          echo "new_deposition_id=$new_deposition_id" >> $GITHUB_ENV
+          echo "new_bucket_url=$new_bucket_url" >> $GITHUB_ENV
+
+      - name: Upload files to Zenodo
+        run: |
+          for file in data/*.ttl; do
+            echo "Uploading $file..."
+            curl --progress-bar \
+              -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+              --upload-file "$file" \
+              "${{ env.new_bucket_url }}/$(basename $file)"
+          done
+
+      - name: Update Metadata for New Version
+        run: |
+          version=20251110
+          current_date=$(date +%Y-%m-%d)
+          metadata=$(jq -n \
+            --arg title "WikiPathways Linksets Homo Sapiens" \
+            --arg version "$version" \
+            --arg date "$current_date" \
+            --argjson communities '[{"identifier": "cytargetlinker"}]' \
+            --arg description "<p>This dataset is a linkset network containing pathway-gene interactions for all human WikiPathways pathways in XGMML format.</p>" \
+            --argjson creators '[
+              {"name": "Kutmon, Martina", "affiliation": "Maastricht University", "orcid": "0000-0002-7699-8191"},
+              {"name": "Martens, Marvin", "affiliation": "Maastricht University", "orcid": "0000-0003-2230-0840"},
+              {"name": "Ehrhart, Friederike", "affiliation": "Maastricht University", "orcid": "0000-0002-7770-620X"}
+            ]' \
+            --argjson related_identifiers '[
+              {"identifier": "10.1093/nar/gkad960", "relation": "references", "resource_type": "publication-article", "scheme": "doi"},
+              {"identifier": "10.12688/f1000research.14613.1", "relation": "references", "resource_type": "publication-article", "scheme": "doi"}
+            ]' \
+            '{
+              metadata: {
+                title: $title,
+                version: $version,
+                publication_date: $date,
+                description: $description,
+                access_right: "open",
+                upload_type: "dataset",
+                language: "eng",
+                license: "cc-by-4.0",
+                creators: $creators,
+                related_identifiers: $related_identifiers,
+                references: ["Kutmon et al (2018) https://doi.org/10.12688/f1000research.14613.1"],
+                communities: $communities
+                }
+            }')
+
+          curl -s \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -X PUT \
+            --data "$metadata" \
+            "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}"
+
+      - name: Publish Updated Zenodo Record
+        run: |
+          publish_response=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/actions/publish")
+          echo "Publish Response: $publish_response"
+          if echo "$publish_response" | jq -e '.status == "error"' > /dev/null 2>&1; then
+            echo "Publishing failed!"
+            exit 1
+          fi
+          echo "Published successfully. DOI: $(echo "$publish_response" | jq -r '.doi')"
