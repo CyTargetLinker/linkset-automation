@@ -13,10 +13,13 @@ jobs:
       
       - name: Install dependencies with pip
         run: pip3 install gseapy requests
-      - name: check ls
-        run: ls
-      - name: Run preprocessing
         
+      - name: Run preprocessing
         run: |
           python3 wikipathways/wp.py
+        
+      - name: Create Linkset XGMML file
+        run: |
+           java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar -c wikipathways/wp.config -i input.txt -o wikipathways.xgmml
+      
  
