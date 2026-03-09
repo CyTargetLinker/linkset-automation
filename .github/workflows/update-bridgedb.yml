@@ -63,15 +63,3 @@ jobs:
           if [ ! -e ./Hs_Derby_Ensembl_111.bridge ]; then
             wget -O Hs_Derby_Ensembl_111.bridge https://zenodo.org/record/14779056/files/Hs_Derby_Ensembl_111.bridge?download=1
           fi
-          if [ ! -e ./Mm_Derby_Ensembl_111.bridge ]; then
-            wget -O Mm_Derby_Ensembl_111.bridge https://zenodo.org/record/14779056/files/Mm_Derby_Ensembl_111.bridge?download=1
-          fi
-          if [ ! -e ./Rn_Derby_Ensembl_111.bridge ]; then
-            wget -O Rn_Derby_Ensembl_111.bridge https://zenodo.org/record/14779056/files/Rn_Derby_Ensembl_111.bridge?download=1
-          fi
-          if [ ! -e ./Dr_Derby_Ensembl_111.bridge ]; then
-            wget -O Dr_Derby_Ensembl_111.bridge https://zenodo.org/record/14779056/files/Dr_Derby_Ensembl_111.bridge?download=1
-          fi
-          if [ ! -e ./metabolites_20241215.bridge ]; then
-            wget -O metabolites_20241215.bridge https://zenodo.org/record/14779056/files/https://figshare.com/ndownloader/files/51201419
-          fi
