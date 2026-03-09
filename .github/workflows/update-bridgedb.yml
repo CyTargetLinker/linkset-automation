@@ -28,38 +28,31 @@ jobs:
           distribution: 'temurin'
           java-version: '11'
             
-      - name: Cache linkset-creator with dependencies
+      - name: Cache linkset-creator jar
         uses: actions/cache@v4
         id: cache-linkset-creator-jar
         with:
           path: ./linkset-creator-v2.0.jar
-          key: cached-linkset-creator-action-${{ hashFiles('linkset-creator-v2.0.jar') }}
-          restore-keys: |
-            cached-linkset-creator-action-${{ hashFiles('linkset-creator-v2.0.jar') }}
-            cached-linkset-creator-action-
-    
-      - name: Install deps
+          key: cached-linkset-creator-v2.0-jar   # static key — version is in the name
+      
+      - name: Download linkset-creator jar
+        if: steps.cache-linkset-creator-jar.outputs.cache-hit != 'true'
         run: |
-          echo "Refreshing cached-linkset-creator-action"
-          if [ ! -e ./linkset-creator-v2.0.jar ]; then
-            wget -O linkset-creator-v2.0.jar https://github.com/CyTargetLinker/linksetCreator/releases/download/v2.0/linkset-creator-v2.0.jar
-          fi
-
-      - name: Cache and install dependencies
+          echo "Cache miss — downloading linkset-creator jar"
+          wget -O linkset-creator-v2.0.jar \
+            https://github.com/CyTargetLinker/linksetCreator/releases/download/v2.0/linkset-creator-v2.0.jar
+      
+      - name: Cache BridgeDb file
         uses: actions/cache@v4
-        id: cache
+        id: cache-bridgedb
         with:
           path: ${{ github.workspace }}/bridgedb/Hs_Derby_Ensembl_111.bridge
-          key: ${{ runner.os }}-java-Hs_Derby_Ensembl_111
-          restore-keys: |
-            ${{ runner.os }}-java-Hs_Derby_Ensembl_111
-            ${{ runner.os }}-java-Hs_Derby_Ensembl_
-                
-      - if: steps.cache.outputs.cache-hit != 'true'
-        name: Install deps
+          key: ${{ runner.os }}-Hs_Derby_Ensembl_111   # static key — no hash needed for versioned file
+      
+      - name: Download BridgeDb file
+        if: steps.cache-bridgedb.outputs.cache-hit != 'true'
         run: |
+          echo "Cache miss — downloading BridgeDb bridge file"
           mkdir -p "${{ github.workspace }}/bridgedb"
-          cd "${{ github.workspace }}/bridgedb"
-          if [ ! -e ./Hs_Derby_Ensembl_111.bridge ]; then
-            wget -O Hs_Derby_Ensembl_111.bridge https://zenodo.org/record/14779056/files/Hs_Derby_Ensembl_111.bridge?download=1
-          fi
+          wget -O "${{ github.workspace }}/bridgedb/Hs_Derby_Ensembl_111.bridge" \
+            "https://zenodo.org/record/14779056/files/Hs_Derby_Ensembl_111.bridge?download=1"
