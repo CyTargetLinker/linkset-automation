@@ -29,7 +29,10 @@ jobs:
 
       - name: Run preprocessing
         run: python3 wikipathways/wp.py
-
+        
+      - name: check ls
+        run: ls
+        
       - name: Create Linkset XGMML file
         run: |
           java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
