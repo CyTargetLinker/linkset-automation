@@ -2,33 +2,37 @@ on:
   workflow_dispatch:
 
 jobs:
-  
-          
-  refresh-cache:
+  use-cached-files:
     runs-on: ubuntu-latest
     steps:
-      - name: Load cache
+
+      - name: Restore linkset-creator jar from cache
         uses: actions/cache@v4
-        with: 
-          restore-keys: |  
-            cache 
-            cache-linkset-creator-jar
-          
+        with:
+          path: ./linkset-creator-v2.0.jar
+          key: cached-linkset-creator-v2.0-jar
+
+      - name: Restore BridgeDb file from cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/bridgedb/Hs_Derby_Ensembl_111.bridge
+          key: ${{ runner.os }}-Hs_Derby_Ensembl_111
+
       - name: Checkout repo
-        uses: actions/checkout@v5
+        uses: actions/checkout@v4
 
       - name: Setup Python
-        uses: actions/setup-python@v6.0.0
-      
+        uses: actions/setup-python@v5
+
       - name: Install dependencies with pip
         run: pip3 install gseapy requests
-        
+
       - name: Run preprocessing
-        run: |
-          python3 wikipathways/wp.py
-        
+        run: python3 wikipathways/wp.py
+
       - name: Create Linkset XGMML file
         run: |
-           java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar -c wikipathways/wp.config -i input.txt -o wikipathways.xgmml
-      
- 
+          java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
+            -c wikipathways/wp.config \
+            -i input.txt \
+            -o wikipathways.xgmml
