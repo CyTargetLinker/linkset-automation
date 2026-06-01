@@ -55,6 +55,9 @@ jobs:
             -i input.txt \
             -o wikipathways.xgmml
 
+      - name: QC validate linkset
+        run: python3 scripts/qc_xgmml.py --min-nodes 1 --min-edges 1 wikipathways.xgmml
+
       - name: Check ls
         run: ls -la
 
