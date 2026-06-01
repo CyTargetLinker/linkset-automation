@@ -10,6 +10,7 @@ Under construction: This repo automatically generates CyTargetLinker linksets fr
 4. Run the LinksetCreator
 5. Do the quality control procedure with the obtained xgmml file (see **QC** below).
 6. If positive, run the linkset upload-to-storage script
+7. Update the CTL website to add the new linkset download link and description
 
 ## QC
 `scripts/qc_xgmml.py` validates that an XGMML linkset is well-formed and has the structure every CyTargetLinker linkset carries (a `<graph>`, nodes with an `identifiers` list + `type`, and edges whose `source`/`target` reference existing nodes plus `datasource`/`interaction`). Empty graphs fail by default.

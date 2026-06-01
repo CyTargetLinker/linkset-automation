@@ -55,6 +55,9 @@ jobs:
             -i input.txt \
             -o wikipathways.xgmml
 
+      - name: QC validate linkset
+        run: python3 scripts/qc_xgmml.py --min-nodes 1 --min-edges 1 wikipathways.xgmml
+
       - name: Check ls
         run: ls -la
 
@@ -69,7 +72,7 @@ jobs:
 
       - name: Discard Current Draft
         run: |
-          deposition-id=18925861
+          deposition-id=20485717
           discard_response=$(curl -s -X POST \
             -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
             "https://zenodo.org/api/deposit/depositions/$deposition-id/actions/discard")
@@ -108,19 +111,17 @@ jobs:
           echo "new_deposition_id=$new_deposition_id" >> $GITHUB_ENV
           echo "new_bucket_url=$new_bucket_url" >> $GITHUB_ENV
 
-      - name: Upload files to Zenodo
+      - name: Upload linkset to Zenodo
         run: |
-          for file in data/*.ttl; do
-            echo "Uploading $file..."
-            curl --progress-bar \
-              -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
-              --upload-file "$file" \
-              "${{ env.new_bucket_url }}/$(basename $file)"
-          done
+          echo "Uploading wikipathways.xgmml..."
+          curl --progress-bar \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            --upload-file wikipathways.xgmml \
+            "${{ env.new_bucket_url }}/wikipathways.xgmml"
 
       - name: Update Metadata for New Version
         run: |
-          version=20251110
+          version=20260510
           current_date=$(date +%Y-%m-%d)
           metadata=$(jq -n \
             --arg title "WikiPathways Linksets Homo Sapiens" \

@@ -4,7 +4,7 @@ import gseapy as gp
 import requests
 
 # gmt version
-version = "20251110"
+version = "20260510"
 gmt = "wikipathways-" + version + "-gmt-Homo_sapiens.gmt"
 
 # Download from URL
