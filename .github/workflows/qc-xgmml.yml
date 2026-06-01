@@ -1,0 +1,102 @@
+name: QC XGMML
+
+# Validate that an XGMML linkset is well-formed and structurally sound.
+# Two ways to use it:
+#   - workflow_dispatch: run manually; point it at any .xgmml via `url` or a repo `pattern`.
+#   - workflow_call: invoke from another workflow; pass a `url`, an uploaded `artifact`
+#     name, or a repo `pattern`. (Reusable workflows share the run's artifacts.)
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: "URL of an .xgmml file to validate (optional)"
+        required: false
+        default: ""
+      pattern:
+        description: "Repo glob to validate if no URL is given (e.g. **/*.xgmml)"
+        required: false
+        default: ""
+      allow_empty:
+        description: "Allow empty graphs (0 nodes/edges)"
+        type: boolean
+        required: false
+        default: false
+      min_nodes:
+        description: "Fail if fewer than this many nodes"
+        required: false
+        default: "0"
+      min_edges:
+        description: "Fail if fewer than this many edges"
+        required: false
+        default: "0"
+  workflow_call:
+    inputs:
+      url:
+        type: string
+        required: false
+        default: ""
+      artifact:
+        description: "Name of an uploaded artifact whose .xgmml files to validate"
+        type: string
+        required: false
+        default: ""
+      pattern:
+        type: string
+        required: false
+        default: ""
+      allow_empty:
+        type: boolean
+        required: false
+        default: false
+      min_nodes:
+        type: string
+        required: false
+        default: "0"
+      min_edges:
+        type: string
+        required: false
+        default: "0"
+
+jobs:
+  qc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+
+      - name: Download artifact to validate
+        if: ${{ inputs.artifact != '' }}
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ inputs.artifact }}
+          path: qc-input
+
+      - name: Validate XGMML
+        run: |
+          # Resolve which files to validate: a downloaded URL, an artifact, or a repo glob.
+          if [ -n "${{ inputs.url }}" ]; then
+            echo "Downloading ${{ inputs.url }}"
+            curl -sL "${{ inputs.url }}" -o qc-download.xgmml
+            files="qc-download.xgmml"
+          elif [ -n "${{ inputs.artifact }}" ]; then
+            files=$(find qc-input -name '*.xgmml')
+          else
+            files="${{ inputs.pattern }}"
+          fi
+
+          if [ -z "$files" ]; then
+            echo "No input given. Provide 'url', 'artifact', or 'pattern'."
+            exit 1
+          fi
+
+          flags="--min-nodes ${{ inputs.min_nodes }} --min-edges ${{ inputs.min_edges }}"
+          if [ "${{ inputs.allow_empty }}" = "true" ]; then
+            flags="$flags --allow-empty"
+          fi
+
+          echo "Validating: $files"
+          python3 scripts/qc_xgmml.py $flags $files
