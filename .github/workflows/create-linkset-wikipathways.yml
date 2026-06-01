@@ -4,8 +4,6 @@ on:
 jobs:
   use-cached-files:
     runs-on: ubuntu-latest
-    env:
-      DEPOSITION_ID: "18925861"
     steps:
 
       - name: Checkout repo
@@ -71,9 +69,10 @@ jobs:
 
       - name: Discard Current Draft
         run: |
+          deposition-id=18925861
           discard_response=$(curl -s -X POST \
             -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
-            "https://zenodo.org/api/deposit/depositions/${{ env.DEPOSITION_ID }}/actions/discard")
+            "https://zenodo.org/api/deposit/depositions/$deposition-id/actions/discard")
           echo "Discard Response: $discard_response"
           # Non-fatal: no existing draft is fine, so we do not exit on failure here
 
@@ -82,7 +81,7 @@ jobs:
         run: |
           response=$(curl -s -X POST \
             -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
-            "https://zenodo.org/api/deposit/depositions/${{ env.DEPOSITION_ID }}/actions/newversion")
+            "https://zenodo.org/api/deposit/depositions/$deposition-id/actions/newversion")
           echo "Response: $response"
 
           new_draft_url=$(echo "$response" | jq -r '.links.latest_draft')
