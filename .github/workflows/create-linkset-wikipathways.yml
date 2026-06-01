@@ -72,7 +72,7 @@ jobs:
 
       - name: Discard Current Draft
         run: |
-          deposition_id=4500957
+          deposition_id=4500958
           discard_response=$(curl -s -X POST \
             -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
             "https://zenodo.org/api/deposit/depositions/$deposition_id/actions/discard")
@@ -82,7 +82,7 @@ jobs:
       - name: Create a New Version of the Deposition
         id: new_version
         run: |
-          deposition_id=4500957
+          deposition_id=4500958
           response=$(curl -s -X POST \
             -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
             "https://zenodo.org/api/deposit/depositions/$deposition_id/actions/newversion")
