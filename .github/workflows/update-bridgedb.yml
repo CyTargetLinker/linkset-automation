@@ -55,4 +55,4 @@ jobs:
           echo "Cache miss — downloading BridgeDb bridge file"
           mkdir -p "${{ github.workspace }}/bridgedb"
           wget -O "${{ github.workspace }}/bridgedb/Hs_Derby_Ensembl_111.bridge" \
-            "https://zenodo.org/record/14779056/files/Hs_Derby_Ensembl_111.bridge?download=1"
+            "https://figshare.com/ndownloader/files/64796817"
