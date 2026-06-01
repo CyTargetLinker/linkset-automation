@@ -10,3 +10,4 @@ Under construction: This repo automatically generates CyTargetLinker linksets fr
 4. Run the LinksetCreator
 5. Do the quality control procedure with the obtained xgmml file.
 6. If positive, run the linkset upload-to-storage script
+7. Update the CTL website to add the new linkset download link and description
