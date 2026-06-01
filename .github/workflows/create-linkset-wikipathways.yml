@@ -69,7 +69,7 @@ jobs:
 
       - name: Discard Current Draft
         run: |
-          deposition-id=18925861
+          deposition-id=20485717
           discard_response=$(curl -s -X POST \
             -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
             "https://zenodo.org/api/deposit/depositions/$deposition-id/actions/discard")
