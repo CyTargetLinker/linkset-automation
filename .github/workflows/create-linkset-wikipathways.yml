@@ -22,19 +22,26 @@ jobs:
           wget -O linkset-creator-v2.0.jar \
             https://github.com/CyTargetLinker/linksetCreator/releases/download/v2.0/linkset-creator-v2.0.jar
 
-      - name: Restore BridgeDb file from cache
-        uses: actions/cache@v4
-        id: cache-bridgedb
-        with:
-          path: ${{ github.workspace }}/bridgedb/Hs_Derby_Ensembl_111.bridge
-          key: ${{ runner.os }}-Hs_Derby_Ensembl_111
-
-      - name: Download BridgeDb file if cache missed
-        if: steps.cache-bridgedb.outputs.cache-hit != 'true'
+      - name: Download BridgeDb files (latest figshare URLs from bridgedb/data)
         run: |
-          mkdir -p "${{ github.workspace }}/bridgedb"
-          wget -O "${{ github.workspace }}/bridgedb/Hs_Derby_Ensembl_111.bridge" \
-            "https://zenodo.org/record/14779056/files/Hs_Derby_Ensembl_111.bridge?download=1"
+          mkdir -p bridgedb
+          # gene.json in github.com/bridgedb/data holds the latest per-species .bridge URLs.
+          curl -sL "https://raw.githubusercontent.com/bridgedb/data/main/gene.json" -o gene.json
+          ua="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+          for entry in \
+            "Homo sapiens|hsa" \
+            "Mus musculus|mmu" \
+            "Rattus norvegicus|rno"; do
+            org="${entry%|*}"; code="${entry#*|}"
+            url=$(jq -r --arg o "$org" '.mappingFiles[] | select(.species==$o) | .downloadURL' gene.json)
+            # figshare needs the ndownloader host + a browser UA/Referer
+            norm="${url/https:\/\/figshare.com\/ndownloader/https:\/\/ndownloader.figshare.com}"
+            echo "Downloading $code bridge ($org) from $norm"
+            wget --quiet --user-agent="$ua" --header="Referer: https://figshare.com/" \
+              -O "bridgedb/${code}.bridge" "$norm"
+            unzip -t "bridgedb/${code}.bridge" >/dev/null 2>&1 || { echo "BAD ZIP: ${code}.bridge"; exit 1; }
+          done
+          ls -la bridgedb/
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -48,24 +55,28 @@ jobs:
       - name: Check ls
         run: ls -la
 
-      - name: Create Linkset XGMML file
+      - name: Create Linkset XGMML files
         run: |
-          java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
-            -c wikipathways/wp.config \
-            -i input.txt \
-            -o wikipathways.xgmml
+          for code in hsa mmu rno; do
+            echo "=== $code ==="
+            java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
+              -c "wikipathways/wp_${code}.config" \
+              -i "input_${code}.txt" \
+              -o "wikipathways_${code}.xgmml"
+          done
+          ls -la wikipathways_*.xgmml
 
-      - name: QC validate linkset
-        run: python3 scripts/qc_xgmml.py --min-nodes 1 --min-edges 1 wikipathways.xgmml
+      - name: QC validate linksets
+        run: python3 scripts/qc_xgmml.py --min-nodes 1 --min-edges 1 wikipathways_hsa.xgmml wikipathways_mmu.xgmml wikipathways_rno.xgmml
 
       - name: Check ls
         run: ls -la
 
-      - name: Upload linkset artifact
+      - name: Upload linkset artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: wikipathways-linkset
-          path: wikipathways.xgmml
+          name: wikipathways-linksets
+          path: wikipathways_*.xgmml
 
       - name: Install curl and jq
         run: sudo apt-get install -y curl jq
@@ -129,24 +140,26 @@ jobs:
               "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/files/$file_id"
           done
 
-      - name: Upload linkset to Zenodo
+      - name: Upload linksets to Zenodo
         run: |
-          echo "Uploading wikipathways.xgmml..."
-          curl --progress-bar \
-            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
-            --upload-file wikipathways.xgmml \
-            "${{ env.new_bucket_url }}/wikipathways.xgmml"
+          for f in wikipathways_hsa.xgmml wikipathways_mmu.xgmml wikipathways_rno.xgmml; do
+            echo "Uploading $f..."
+            curl --progress-bar \
+              -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+              --upload-file "$f" \
+              "${{ env.new_bucket_url }}/$f"
+          done
 
       - name: Update Metadata for New Version
         run: |
           version=20260510
           current_date=$(date +%Y-%m-%d)
           metadata=$(jq -n \
-            --arg title "WikiPathways Linksets Homo Sapiens" \
+            --arg title "WikiPathways Linksets" \
             --arg version "$version" \
             --arg date "$current_date" \
             --argjson communities '[{"identifier": "cytargetlinker"}]' \
-            --arg description "<p>This dataset is a linkset network containing pathway-gene interactions for all human WikiPathways pathways in XGMML format.</p>" \
+            --arg description "<p>This dataset contains linkset networks of pathway-gene interactions for all human, mouse, and rat WikiPathways pathways in XGMML format.</p>" \
             --argjson creators '[
               {"name": "Kutmon, Martina", "affiliation": "Maastricht University", "orcid": "0000-0002-7699-8191"},
               {"name": "Martens, Marvin", "affiliation": "Maastricht University", "orcid": "0000-0003-2230-0840"},

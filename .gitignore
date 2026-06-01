@@ -1,0 +1,20 @@
+# Python
+__pycache__/
+*.pyc
+
+# Downloaded source data
+*.gmt
+*.gz
+
+# BridgeDb identifier-mapping files
+*.bridge
+bridgedb/
+gene.json
+
+# linkset-creator jar (downloaded in CI)
+linkset-creator-*.jar
+
+# Generated pipeline outputs
+input_*.txt
+*.xgmml
+*.log
