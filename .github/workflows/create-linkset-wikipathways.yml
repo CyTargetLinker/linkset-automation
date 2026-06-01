@@ -112,6 +112,23 @@ jobs:
           echo "new_deposition_id=$new_deposition_id" >> $GITHUB_ENV
           echo "new_bucket_url=$new_bucket_url" >> $GITHUB_ENV
 
+      - name: Clear inherited files from the new draft
+        run: |
+          # A new Zenodo version is created as a copy of the previous version,
+          # including its files. Remove those inherited files so this version
+          # contains only the freshly built linkset (not stale older ones).
+          files=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/files")
+          echo "Inherited files: $files"
+          echo "$files" | jq -r '.[].id' | while read -r file_id; do
+            [ -z "$file_id" ] && continue
+            echo "Deleting inherited file $file_id"
+            curl -s -X DELETE \
+              -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+              "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/files/$file_id"
+          done
+
       - name: Upload linkset to Zenodo
         run: |
           echo "Uploading wikipathways.xgmml..."
