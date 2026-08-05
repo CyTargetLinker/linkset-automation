@@ -16,6 +16,8 @@ Under construction: This repo automatically generates CyTargetLinker linksets fr
 **This list is still being extended.** The resources below are the ones
 covered so far; more are being added as they are automated, and the table is
 updated once a resource is built and deposited.
+[`LinksetStatusList.md`](LinksetStatusList.md) tracks how far each resource has
+got, and which databases are still candidates for automation.
 
 | Resource | Details | Persistent DOI | License |
 | --- | --- | --- | --- |
