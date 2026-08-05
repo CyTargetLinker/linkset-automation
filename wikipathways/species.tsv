@@ -1,0 +1,52 @@
+# The species built by wp.py. This is the only place the species list lives:
+# the per-species .config files, the workflow's build/QC loops and the Zenodo
+# file list are all derived from it (via build/manifest.tsv).
+#
+# code             CyTargetLinker short code; names input_<code>.txt,
+#                  wp_<code>.config and wikipathways_<code>.xgmml
+# wp_token         species as spelled in the GMT filename
+#                  (wikipathways-<version>-gmt-<wp_token>.gmt)
+# bridgedb_species species key in bridgedb/data gene.json. Stated explicitly
+#                  rather than derived from wp_token: the two sources can drift
+#                  (Ensembl now calls the dog Canis lupus familiaris) and the
+#                  .bridge filenames are not derivable from the name anyway
+#                  (Equus caballus -> Qc_, Populus trichocarpa -> Pi_).
+# syscodes_out     BridgeDb cross-reference systems to expand gene ids into.
+#                  H (HGNC) is human-only; everything else gets En,L,S.
+# tier             core = a missing GMT fails the whole run.
+#                  extra = a missing or near-empty GMT is skipped with a warning.
+#                  off  = not built.
+# min_mapped_frac  QC floor: fraction of gene nodes that must gain
+#                  cross-references, else the run fails (see scripts/qc_xgmml.py).
+#
+# All GMTs use NCBI Entrez gene ids regardless of species, so target_syscode_in
+# is L for every row and is not a column.
+#
+# code	wp_token	bridgedb_species	syscodes_out	tier	min_mapped_frac
+hsa	Homo_sapiens	Homo sapiens	En,H,L,S	core	0.90
+mmu	Mus_musculus	Mus musculus	En,L,S	core	0.90
+rno	Rattus_norvegicus	Rattus norvegicus	En,L,S	core	0.90
+bta	Bos_taurus	Bos taurus	En,L,S	extra	0.80
+sce	Saccharomyces_cerevisiae	Saccharomyces cerevisiae	En,L,S	extra	0.80
+cel	Caenorhabditis_elegans	Caenorhabditis elegans	En,L,S	extra	0.80
+dre	Danio_rerio	Danio rerio	En,L,S	extra	0.80
+ptr	Pan_troglodytes	Pan troglodytes	En,L,S	extra	0.80
+cfa	Canis_familiaris	Canis familiaris	En,L,S	extra	0.80
+gga	Gallus_gallus	Gallus gallus	En,L,S	extra	0.80
+dme	Drosophila_melanogaster	Drosophila melanogaster	En,L,S	extra	0.80
+# Arabidopsis and Anopheles have Ensembl Plants / Metazoa 56 BridgeDb files
+# rather than Ensembl 111 like the rest, which was expected to map the
+# Entrez-keyed GMTs poorly. Measured on release 20260710 it does not: both
+# reach 100% cross-reference coverage, so they carry the same floor as the
+# other extra species.
+ath	Arabidopsis_thaliana	Arabidopsis thaliana	En,L,S	extra	0.80
+aga	Anopheles_gambiae	Anopheles gambiae	En,L,S	extra	0.80
+#
+# Available in both WikiPathways and BridgeDb, but not built: too few pathways
+# to be a useful linkset (counts from release 20260710). Re-enable by
+# uncommenting and setting tier to extra once WikiPathways has more content.
+# eca	Equus_caballus	Equus caballus	En,L,S	off	0.00	5 pathways
+# pop	Populus_trichocarpa	Populus trichocarpa	En,L,S	off	0.00	5 pathways
+# ssc	Sus_scrofa	Sus scrofa	En,L,S	off	0.00	2 pathways
+# sly	Solanum_lycopersicum	Solanum lycopersicum	En,L,S	off	0.00	1 pathway
+# zma	Zea_mays	Zea mays	En,L,S	off	0.00	1 pathway
