@@ -1,30 +1,44 @@
-name: Weekly BridgeDb and linkset-creator cache
+name: BridgeDb and linkset-creator cache
 
-# Populates two caches the linkset workflows restore instead of downloading:
+# Populates the caches the linkset workflows restore instead of downloading:
 #
 #   - the linkset-creator jar (small, static key)
 #   - a bundle of every BridgeDb .bridge file the repo needs (~3.2 GB)
+#   - the metabolite mapping file (~2.8 GB, its own entry)
 #
-# Why cache the bundle: the .bridge files are large (human alone is ~840 MB)
-# and the same ones are pulled by several linkset workflows, so fetching them
-# once and reusing the cache saves both time and load on Figshare. GitHub also
-# evicts caches that go 7 days without being read, so a weekly refresh is what
-# keeps the bundle alive.
+# Why cache at all: the .bridge files are large (human alone is ~840 MB) and
+# the same ones are pulled by the WikiPathways, TFLink, Orphanet and ChEMBL
+# workflows, so fetching them once saves both time and load on Figshare.
 #
-# The bundle key is the ISO week, so a new bundle is built each week and picks
-# up any BridgeDb release from that week. Consumers restore the current week's
-# key and fall back to the most recent bundle via the `bridgedb-bundle-`
-# prefix, so a linkset run never blocks on this job having finished. On a miss
-# they download the species they need themselves, exactly as before.
+# Cadence. This runs every two months, because that is about how often the
+# contents change — BridgeDb releases are infrequent and the linkset-creator
+# jar is pinned. Note that the schedule does NOT keep the caches alive: GitHub
+# evicts any entry that goes 7 days without being read, and what resets that
+# timer is a linkset workflow restoring it, not this job rewriting it. So the
+# schedule's only job is picking up new upstream releases.
 #
-# Dispatch this workflow manually to pull a BridgeDb release mid-week.
+# Every cache key is content-derived, so a scheduled run that finds nothing new
+# is a cache hit and re-downloads nothing:
+#
+#   - species bundle: hashed from the resolved gene.json download URLs
+#   - metabolites:    the release-dated filename from other.json
+#
+# Consumers restore by the `bridgedb-bundle-` prefix, so they pick up whatever
+# the newest bundle is without knowing its key, and on a miss they download the
+# species they need themselves exactly as before. A linkset run therefore never
+# depends on this job having succeeded.
+#
+# Dispatch this workflow manually to pull a BridgeDb release between runs.
 
 on:
   repository_dispatch:
     types: [bridgedb-data-update-event]
   workflow_dispatch:
   schedule:
-    - cron: "0 0 * * 0"
+    # 03:17 UTC on the 1st of every second month. The odd minute and off-peak
+    # hour are deliberate: GitHub queues scheduled workflows behind everyone
+    # else's on-the-hour crons and may delay or drop them.
+    - cron: "17 3 1 */2 *"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
@@ -55,9 +69,64 @@ jobs:
           wget -O linkset-creator-v2.0.jar \
             https://github.com/CyTargetLinker/linksetCreator/releases/download/v2.0/linkset-creator-v2.0.jar
 
-      - name: Compute the bundle cache key
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      # Resolve first, then key on the result, so the bundle is rebuilt only
+      # when BridgeDb actually publishes something new. The download URLs are
+      # opaque Figshare file ids that change on every release, which makes them
+      # a good content fingerprint.
+      #
+      # The bridgedb_species column is located by NAME from the commented header
+      # row rather than by position. species.tsv has gained columns before
+      # (ncbi_clade landed between wp_token and bridgedb_species), and a
+      # positional read silently looks up the wrong field when that happens.
+      - name: Resolve the species download URLs
         id: key
-        run: echo "key=bridgedb-bundle-$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+        run: |
+          set -euo pipefail
+          curl -sSL --retry 5 --retry-delay 5 \
+            "https://raw.githubusercontent.com/bridgedb/data/main/gene.json" -o gene.json
+
+          # The pattern requires literal TABs around the name. species.tsv also
+          # has a prose comment block that documents each column ("#
+          # bridgedb_species  species key in ...", space-separated), and that
+          # line is not the header row.
+          header=$(grep -m1 "$(printf '^#.*\tbridgedb_species\t')" wikipathways/species.tsv || true)
+          if [ -z "$header" ]; then
+            echo "ERROR: species.tsv has no tab-separated header row naming bridgedb_species"
+            exit 1
+          fi
+          col=$(printf '%s\n' "${header#\# }" \
+                | awk -F'\t' '{for (i=1; i<=NF; i++) if ($i == "bridgedb_species") { print i; exit }}')
+          if [ -z "$col" ]; then
+            echo "ERROR: no 'bridgedb_species' column in the species.tsv header"
+            exit 1
+          fi
+          echo "bridgedb_species is column $col"
+
+          : > species-urls.tsv
+          while IFS=$'\t' read -r code bridgedb_species; do
+            [ -z "$code" ] && continue
+            url=$(jq -r --arg o "$bridgedb_species" \
+                  '.mappingFiles[] | select(.species==$o) | .downloadURL' gene.json)
+            if [ -z "$url" ] || [ "$url" = "null" ]; then
+              echo "ERROR: no BridgeDb mapping file for '$bridgedb_species' in gene.json"
+              exit 1
+            fi
+            printf '%s\t%s\n' "$code" "$url" >> species-urls.tsv
+          done < <(grep -v '^[[:space:]]*#' wikipathways/species.tsv \
+                   | awk -F'\t' -v c="$col" 'NF > 1 { print $1 "\t" $c }')
+
+          n=$(wc -l < species-urls.tsv)
+          if [ "$n" -eq 0 ]; then
+            echo "ERROR: resolved no species from species.tsv"
+            exit 1
+          fi
+          hash=$(sort species-urls.tsv | sha256sum | cut -c1-16)
+          echo "key=bridgedb-bundle-${hash}" >> "$GITHUB_OUTPUT"
+          echo "Resolved $n species; bundle key bridgedb-bundle-${hash}"
+          cat species-urls.tsv
 
       - name: Restore or create the BridgeDb bundle
         uses: actions/cache@v4
@@ -66,52 +135,31 @@ jobs:
           path: bridgedb
           key: ${{ steps.key.outputs.key }}
 
-      # Unconditional: the metabolite step below needs jq even when the species
-      # bundle hits. (It is preinstalled on ubuntu-latest, but do not rely on
-      # that implicitly.)
-      - name: Install jq
-        run: sudo apt-get install -y jq
-
+      # wikipathways/species.tsv is the repo's species list and is a superset of
+      # what the other linksets use, so caching its species covers TFLink,
+      # Orphanet and ChEMBL too.
       - name: Download every BridgeDb file the repo needs
         if: steps.cache-bridgedb.outputs.cache-hit != 'true'
         run: |
           set -euo pipefail
           mkdir -p bridgedb
-          curl -sSL --retry 5 --retry-delay 5 \
-            "https://raw.githubusercontent.com/bridgedb/data/main/gene.json" -o gene.json
-
-          # wikipathways/species.tsv is the repo's species list and is a
-          # superset of what the other linksets use, so caching its species
-          # covers TFLink, Orphanet and ChEMBL too.
-          #
-          # Columns here are code / wp_token / bridgedb_species / syscodes_out /
-          # tier / min_mapped_frac. Note this is NOT the layout of
-          # build/manifest.tsv, which the linkset workflows iterate over and
-          # which carries an extra `organism` column before bridgedb_species.
-          while IFS=$'\t' read -r code wp_token bridgedb_species syscodes tier frac rest; do
-            case "$code" in ''|'#'*) continue ;; esac
-            echo "::group::$code ($bridgedb_species)"
-            url=$(jq -r --arg o "$bridgedb_species" \
-                  '.mappingFiles[] | select(.species==$o) | .downloadURL' gene.json)
-            if [ -z "$url" ] || [ "$url" = "null" ]; then
-              echo "ERROR: no BridgeDb mapping file for '$bridgedb_species' in gene.json"
-              exit 1
-            fi
+          while IFS=$'\t' read -r code url; do
+            echo "::group::$code"
             scripts/fetch-bridge.sh "$url" "bridgedb/${code}.bridge"
             echo "::endgroup::"
-          done < wikipathways/species.tsv
+          done < species-urls.tsv
 
           echo "Bundle contents:"
           du -sh bridgedb
           ls -la bridgedb/
 
       # The metabolite mapping file gets its own cache entry rather than joining
-      # the species bundle, for two reasons. It is 2.79 GB on its own, nearly as
-      # much as all 13 species together, and putting it in the weekly bundle
-      # would mean re-uploading it every week and force any consumer that only
-      # wants one species to restore it too. Its filename carries a release date
-      # (metabolites_YYYYMMDD.bridge), so keying on that means it is fetched
-      # once and refreshed only when BridgeDb actually publishes a new one.
+      # the species bundle. It is 2.79 GB on its own, nearly as much as all 13
+      # species together, so folding it in would force any consumer that wants a
+      # single species to restore it as well. Its filename carries a release
+      # date (metabolites_YYYYMMDD.bridge), which is the fingerprint it is keyed
+      # on. Nothing restores it yet — no config in the repo maps metabolites —
+      # so it is groundwork for a metabolite linkset.
       - name: Resolve the metabolite mapping file
         id: metab
         run: |

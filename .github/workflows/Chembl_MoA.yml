@@ -84,15 +84,14 @@ jobs:
       # hit fetch-bridge.sh finds the file already present and valid and
       # returns immediately; on a miss it downloads as usual, so a linkset run
       # never depends on the weekly job having succeeded.
-      - name: Compute the BridgeDb bundle key
-        id: bridgekey
-        run: echo "key=bridgedb-bundle-$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
-
       - name: Restore the BridgeDb bundle
         uses: actions/cache/restore@v4
         with:
           path: bridgedb
-          key: ${{ steps.bridgekey.outputs.key }}
+          # The bundle key is content-derived and owned by update-bridgedb, so
+          # match on the prefix: this picks up whichever bundle is newest
+          # without needing to know its hash. The exact key never matches.
+          key: bridgedb-bundle-none
           restore-keys: bridgedb-bundle-
 
       - name: Download Homo sapiens BridgeDb file
