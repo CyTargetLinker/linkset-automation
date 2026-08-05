@@ -1,0 +1,17 @@
+name=Reactome pathway-gene network
+organism={organism}
+version=Reactome_{version}
+license=CC0 1.0 Universal (Public Domain Dedication)
+source_columns=0,1,2
+target_columns=3,4
+edge_columns=5,6,7
+interaction_type=Pathway-gene
+source_id_column=1
+source_type=pathway
+source_label_column=0
+target_id_column=3
+target_type=gene
+target_bridgedb=bridgedb/{code}.bridge
+target_syscode_in=L
+target_syscodes_out={syscodes_out}
+target_label_column=4

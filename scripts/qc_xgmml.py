@@ -8,7 +8,7 @@ produced by the linkset-creator carries:
   - each <node> has an id, a non-empty `identifiers` list att, a `type` att,
     and a `label` att
   - each <edge> has source/target referencing existing nodes, plus
-    `datasource` and `interaction` atts
+    `datasource` and `interaction` atts, and no source/target pair repeats
 
 By default an empty graph (0 nodes or 0 edges) FAILS; pass --allow-empty to
 permit it. --min-nodes / --min-edges add explicit thresholds.
@@ -131,6 +131,8 @@ def validate_file(path, allow_empty=False, min_nodes=0, min_edges=0,
         if "label" not in by_name and node.get("label") is None:
             warnings.append(f"node '{nid}' has no 'label'")
 
+    edge_pairs = set()
+    duplicate_edges = 0
     for edge in edges:
         eid = edge.get("id") or "?"
         src = edge.get("source")
@@ -142,11 +144,33 @@ def validate_file(path, allow_empty=False, min_nodes=0, min_edges=0,
                 errors.append(f"edge '{eid}' references missing source node '{src}'")
             if tgt not in node_ids:
                 errors.append(f"edge '{eid}' references missing target node '{tgt}'")
+            # linkset-creator writes one edge per input row and de-duplicates
+            # only when source and target ids are equal, so a source table that
+            # lists a pair twice silently inflates the linkset.
+            if (src, tgt) in edge_pairs:
+                duplicate_edges += 1
+            else:
+                edge_pairs.add((src, tgt))
         by_name, _ = _att_index(edge)
         if "datasource" not in by_name:
             errors.append(f"edge '{eid}' has no 'datasource' attribute")
         if "interaction" not in by_name:
             warnings.append(f"edge '{eid}' has no 'interaction' attribute")
+
+    if duplicate_edges:
+        # Deliberately a warning, not an error. Two causes are indistinguishable
+        # here, and only one is a fault. A source table listing the same pair
+        # twice inflates the linkset and should be de-duplicated upstream; but
+        # registerNode() also aliases every id BridgeDb considers equivalent to
+        # the same node (Entrez 100913187 APOBEC3A_B and 200315 APOBEC3A collapse
+        # into one gene), so two legitimately distinct rows in one pathway
+        # produce one repeated pair. The human WikiPathways build carries 221 of
+        # these and is correct, so failing on them would break a working
+        # pipeline. Treat a large jump as a signal to look upstream.
+        warnings.append(
+            f"{duplicate_edges} duplicate edge(s): a source/target pair appears "
+            "more than once (de-duplicated source rows, or ids BridgeDb merges)"
+        )
 
     n_nodes, n_edges = len(nodes), len(edges)
     if n_nodes == 0 or n_edges == 0:

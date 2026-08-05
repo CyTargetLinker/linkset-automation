@@ -1,0 +1,50 @@
+# The species built by reactome.py. This is the only place the species list lives.
+#
+# Nothing reads this file positionally except load_species(), so a new column may
+# be inserted anywhere. (build/manifest.tsv is the opposite: the workflow slices
+# it with cut/read, so columns there may only be appended.)
+#
+# code              names input_<code>.txt, config/reactome_<code>.config, reactome_<code>.xgmml
+# reactome_species  species exactly as spelled in NCBI2Reactome.txt column 6
+# ncbi_token        names <ncbi_token>.gene_info.gz at NCBI; not derivable from the
+#                   Reactome spelling, which uses a space rather than an underscore
+# ncbi_clade        directory under ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/
+# bridgedb_species  species key in bridgedb/data gene.json
+# syscodes_out      BridgeDb systems to expand gene ids into; H (HGNC) is human-only
+# tier              core = too few pathways fails the run; extra = skipped; off = not built
+# min_mapped_frac   QC floor for BridgeDb cross-reference coverage
+# max_reject_frac   ceiling on genes dropped for having no NCBI symbol (human is 3.6%)
+#
+# code	reactome_species	ncbi_token	ncbi_clade	bridgedb_species	syscodes_out	tier	min_mapped_frac	max_reject_frac
+hsa	Homo sapiens	Homo_sapiens	Mammalia	Homo sapiens	En,H,L,S	core	0.90	0.10
+#
+# The other eleven buildable species are held back pending a decision on whether
+# orthology-inferred pathways belong in a linkset. Reactome projects most
+# non-human content from human by orthology: all 1467 mouse pathways share both
+# their name and their numeric stem with a human pathway, and R-MMU-73843 reports
+# isInferred. Rat, cow, dog, zebrafish, pig, Xenopus and C. elegans are likewise
+# 100% IEA. Fly, chicken and yeast are NOT -- 74 Drosophila, 39 Gallus and 1
+# S. cerevisiae pathways are curated (TAS) with no human stem -- so enabling them
+# is a per-species judgement, not one switch.
+#
+# Enabling any of these also needs its .bridge bundle cached: update-bridgedb.yml
+# reads wikipathways/species.tsv, so xtr and ssc would have to be added there too.
+#
+# mmu	Mus musculus	Mus_musculus	Mammalia	Mus musculus	En,L,S	off	0.90	0.10	100% inferred
+# rno	Rattus norvegicus	Rattus_norvegicus	Mammalia	Rattus norvegicus	En,L,S	off	0.90	0.10	100% inferred
+# bta	Bos taurus	Bos_taurus	Mammalia	Bos taurus	En,L,S	off	0.80	0.10	100% inferred
+# cfa	Canis familiaris	Canis_familiaris	Mammalia	Canis familiaris	En,L,S	off	0.80	0.10	100% inferred
+# ssc	Sus scrofa	Sus_scrofa	Mammalia	Sus scrofa	En,L,S	off	0.80	0.10	100% inferred, not in the bridge cache
+# dre	Danio rerio	Danio_rerio	Non-mammalian_vertebrates	Danio rerio	En,L,S	off	0.80	0.10	100% inferred
+# xtr	Xenopus tropicalis	Xenopus_tropicalis	Non-mammalian_vertebrates	Xenopus tropicalis	En,L,S	off	0.80	0.10	100% inferred, not in the bridge cache
+# cel	Caenorhabditis elegans	Caenorhabditis_elegans	Invertebrates	Caenorhabditis elegans	En,L,S	off	0.80	0.10	100% inferred
+# dme	Drosophila melanogaster	Drosophila_melanogaster	Invertebrates	Drosophila melanogaster	En,L,S	off	0.80	0.10	74 curated pathways
+# gga	Gallus gallus	Gallus_gallus	Non-mammalian_vertebrates	Gallus gallus	En,L,S	off	0.80	0.10	39 curated pathways
+# sce	Saccharomyces cerevisiae	Saccharomyces_cerevisiae	Fungi	Saccharomyces cerevisiae	En,L,S	off	0.80	0.10	1 curated pathway
+#
+# Not buildable at all. Dictyostelium discoideum, Schizosaccharomyces pombe and
+# Plasmodium falciparum have no BridgeDb bundle in gene.json. Mycobacterium
+# tuberculosis has one, but NCBI publishes no per-species gene_info for it --
+# Archaea_Bacteria/ holds only the All_* files, E. coli K-12 and P. aeruginosa
+# PAO1 -- the same blocker already documented for horse, tomato and poplar in
+# wikipathways/species.tsv.
