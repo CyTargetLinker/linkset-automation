@@ -19,8 +19,8 @@ updated once a resource is built and deposited.
 | Resource | Details | Persistent DOI | License |
 | --- | --- | --- | --- |
 | [WikiPathways](https://www.wikipathways.org) (13 species) | [`wikipathways/`](wikipathways/readme.md) | [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4500957.svg)](https://doi.org/10.5281/zenodo.4500957) | CC BY 4.0 |
-| [Gene Ontology](https://geneontology.org) (BP / MF / CC, human) | [`go/`](go/readme.md) | not yet deposited | CC BY 4.0 |
-| [TFLink](https://tflink.net) | [`tflink/`](tflink/readme.md) | not yet deposited | Free for non-commercial use |
+| [Gene Ontology](https://geneontology.org) (BP / MF / CC, human) | [`go/`](go/readme.md) | not deposited (paused before release) | CC BY 4.0 |
+| [TFLink](https://tflink.net) | [`tflink/`](tflink/readme.md) | not yet deposited | CC BY-NC 4.0 |
 | [ChEMBL](https://www.ebi.ac.uk/chembl/) (mechanism of action) | [`CHEMBL/`](CHEMBL/readme.md) | not yet deposited | CC BY-SA 3.0 |
 
 Each resource name links to its upstream source, and the Details column links to

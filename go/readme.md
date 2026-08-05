@@ -56,10 +56,16 @@ warns when `VERSION` has drifted from the ontology actually downloaded. The
 configs are static files, so correcting a drift is a manual edit: bump `VERSION`
 in `go.py` and `version=` in all three `go_hsa_*.config` files.
 
-## Not done yet
+## Scope: everything up to release, deliberately
 
-There is no Zenodo deposit step — the workflow builds and QCs the three
-linksets and uploads them as artifacts, but nothing is archived or gets a DOI.
+This resource is **paused before the release step**. The workflow builds the
+three linksets, QCs them and uploads them as artifacts — and stops there. There
+is no Zenodo deposit, so nothing is archived and there is no DOI.
+
+That is a deliberate choice, not an oversight: the GO linkset is not considered
+ready to publish yet. Do not add a deposit step until that changes. When it
+does, the TFLink workflow has the full build → QC → deposit chain to copy, and
+`tflink/readme.md` describes the one-time Zenodo record setup it needs.
 
 ## Adding a species
 
