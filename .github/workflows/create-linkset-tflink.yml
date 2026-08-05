@@ -2,10 +2,38 @@ name: Create TFLink linksets
 
 on:
   workflow_dispatch:
+    inputs:
+      skip_zenodo:
+        description: "Build and QC only, do not touch Zenodo"
+        type: boolean
+        default: false
+      force_publish:
+        description: "Publish even if Zenodo already has this TFLink version"
+        type: boolean
+        default: false
+
+concurrency:
+  # Never run two of these at once: the job mutates a Zenodo draft, and a
+  # cancelled run would leave one dangling.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # One-time setup: TFLink has no Zenodo record yet. Create an initial
+  # deposition in the cytargetlinker community, publish it once by hand, then
+  # put its two IDs here. Until then the build and QC steps run normally and
+  # the publish steps are skipped with a notice.
+  ZENODO_DEPOSITION_ID: ""
+  # Concept (all-versions) record, used to read what is currently published.
+  ZENODO_CONCEPT_ID: ""
 
 jobs:
   create-linksets:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
 
       - name: Checkout repo
@@ -85,3 +113,188 @@ jobs:
         with:
           name: tflink-linksets
           path: tflink_*.xgmml
+
+      - name: Decide whether to publish
+        id: gate
+        run: |
+          set -euo pipefail
+          # TFLink is frozen at v1.0 and the confidence level changes what the
+          # linkset contains, so both belong in the version string.
+          tf_version="$(grep -oP '^VERSION\s*=\s*"\K[^"]+' tflink/tflink.py)"
+          tf_conf="$(grep -oP '^CONFIDENCE\s*=\s*"\K[^"]+' tflink/tflink.py)"
+          version="${tf_version}-${tf_conf}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Built TFLink $version"
+
+          if [ "${{ inputs.skip_zenodo }}" = "true" ]; then
+            echo "skip_zenodo requested; not publishing"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "${ZENODO_DEPOSITION_ID}" ] || [ -z "${ZENODO_CONCEPT_ID}" ]; then
+            echo "::warning::TFLink has no Zenodo record yet, so nothing was published."
+            {
+              echo "### TFLink not published"
+              echo
+              echo "\`ZENODO_DEPOSITION_ID\` / \`ZENODO_CONCEPT_ID\` are unset in this workflow."
+              echo "Create the initial deposition once by hand, publish it, then set both IDs."
+              echo "See \`tflink/readme.md\`. The linksets built fine and are attached as artifacts."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          zen=$(curl -sSL --retry 3 "https://zenodo.org/api/records/${ZENODO_CONCEPT_ID}")
+          zen_version=$(echo "$zen" | jq -r '.metadata.version // ""')
+          echo "Zenodo latest: ${zen_version:-<none>}"
+
+          if [ "$zen_version" = "$version" ] && [ "${{ inputs.force_publish }}" != "true" ]; then
+            echo "Zenodo already publishes TFLink $version; nothing new to release."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Zenodo versions are immutable, so never publish a record that has
+          # lost a species relative to the last one.
+          missing=$(comm -23 \
+            <(echo "$zen" | jq -r '.files[].key' | sort) \
+            <(ls -1 tflink_*.xgmml | sort) || true)
+          if [ -n "$missing" ]; then
+            echo "ERROR: these previously published files are absent from this build:"
+            echo "$missing"
+            echo "Refusing to publish a shrinking record. Re-run with force_publish if intended."
+            exit 1
+          fi
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Discard current Zenodo draft
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          discard_response=$(curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "https://zenodo.org/api/deposit/depositions/${ZENODO_DEPOSITION_ID}/actions/discard")
+          echo "Discard Response: $discard_response"
+          # Non-fatal: no existing draft is fine, so we do not exit on failure here
+
+      - name: Create a new version of the deposition
+        id: new_version
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          response=$(curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "https://zenodo.org/api/deposit/depositions/${ZENODO_DEPOSITION_ID}/actions/newversion")
+
+          new_draft_url=$(echo "$response" | jq -r '.links.latest_draft')
+          if [[ "$new_draft_url" == "null" || -z "$new_draft_url" ]]; then
+            echo "Failed to retrieve the latest draft URL. Response was: $response"
+            exit 1
+          fi
+
+          new_draft_response=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "$new_draft_url")
+
+          new_deposition_id=$(echo "$new_draft_response" | jq -r '.id')
+          new_bucket_url=$(echo "$new_draft_response" | jq -r '.links.bucket')
+
+          if [[ "$new_deposition_id" == "null" || -z "$new_deposition_id" ]]; then
+            echo "Failed to retrieve the new deposition ID. Response was: $new_draft_response"
+            exit 1
+          fi
+
+          echo "New Deposition ID: $new_deposition_id"
+          echo "new_deposition_id=$new_deposition_id" >> $GITHUB_ENV
+          echo "new_bucket_url=$new_bucket_url" >> $GITHUB_ENV
+
+      - name: Clear inherited files from the new draft
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          # A new Zenodo version is created as a copy of the previous version,
+          # including its files. Remove those inherited files so this version
+          # contains only the freshly built linksets (not stale older ones).
+          files=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/files")
+          echo "$files" | jq -r '.[].id' | while read -r file_id; do
+            [ -z "$file_id" ] && continue
+            echo "Deleting inherited file $file_id"
+            curl -s -X DELETE \
+              -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+              "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/files/$file_id"
+          done
+
+      - name: Upload linksets to Zenodo
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          for f in tflink_*.xgmml; do
+            echo "Uploading $f..."
+            curl --fail --progress-bar \
+              -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+              --upload-file "$f" \
+              "${{ env.new_bucket_url }}/$f"
+          done
+
+      - name: Update metadata for the new version
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          version="${{ steps.gate.outputs.version }}"
+          current_date=$(date +%Y-%m-%d)
+          n_species=$(ls -1 tflink_*.xgmml | wc -l)
+          description="<p>This dataset contains linkset networks of transcription factor - target gene interactions from TFLink ${version}, in XGMML format, for ${n_species} species.</p><p>Derived from TFLink (https://tflink.net), which is freely available for non-commercial use. Redistributed under CC BY-NC 4.0 accordingly.</p>"
+
+          metadata=$(jq -n \
+            --arg title "TFLink Linksets" \
+            --arg version "$version" \
+            --arg date "$current_date" \
+            --argjson communities '[{"identifier": "cytargetlinker"}]' \
+            --arg description "$description" \
+            --argjson creators '[
+              {"name": "Kutmon, Martina", "affiliation": "Maastricht University", "orcid": "0000-0002-7699-8191"},
+              {"name": "Martens, Marvin", "affiliation": "Maastricht University", "orcid": "0000-0003-2230-0840"},
+              {"name": "Ehrhart, Friederike", "affiliation": "Maastricht University", "orcid": "0000-0002-7770-620X"}
+            ]' \
+            --argjson related_identifiers '[
+              {"identifier": "10.1093/database/baac083", "relation": "isDerivedFrom", "resource_type": "publication-article", "scheme": "doi"},
+              {"identifier": "10.12688/f1000research.14613.1", "relation": "references", "resource_type": "publication-article", "scheme": "doi"}
+            ]' \
+            '{
+              metadata: {
+                title: $title,
+                version: $version,
+                publication_date: $date,
+                description: $description,
+                access_right: "open",
+                upload_type: "dataset",
+                language: "eng",
+                license: "cc-by-nc-4.0",
+                creators: $creators,
+                related_identifiers: $related_identifiers,
+                references: ["Liska O et al (2022) TFLink. Database, baac083. https://doi.org/10.1093/database/baac083"],
+                communities: $communities
+                }
+            }')
+
+          curl -s \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -X PUT \
+            --data "$metadata" \
+            "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}"
+
+      - name: Publish updated Zenodo record
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          publish_response=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/actions/publish")
+          if echo "$publish_response" | jq -e '.status == "error"' > /dev/null 2>&1; then
+            echo "Publishing failed! Response: $publish_response"
+            exit 1
+          fi
+          echo "Published successfully. DOI: $(echo "$publish_response" | jq -r '.doi')"
