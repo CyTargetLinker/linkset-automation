@@ -1,58 +1,115 @@
-name: Weekly caching of bridge and linksetcreator
+name: Weekly BridgeDb and linkset-creator cache
+
+# Populates two caches the linkset workflows restore instead of downloading:
+#
+#   - the linkset-creator jar (small, static key)
+#   - a bundle of every BridgeDb .bridge file the repo needs (~3.2 GB)
+#
+# Why cache the bundle: the .bridge files are large (human alone is ~840 MB)
+# and the same ones are pulled by several linkset workflows, so fetching them
+# once and reusing the cache saves both time and load on Figshare. GitHub also
+# evicts caches that go 7 days without being read, so a weekly refresh is what
+# keeps the bundle alive.
+#
+# The bundle key is the ISO week, so a new bundle is built each week and picks
+# up any BridgeDb release from that week. Consumers restore the current week's
+# key and fall back to the most recent bundle via the `bridgedb-bundle-`
+# prefix, so a linkset run never blocks on this job having finished. On a miss
+# they download the species they need themselves, exactly as before.
+#
+# Dispatch this workflow manually to pull a BridgeDb release mid-week.
 
 on:
-  repository_dispatch: 
+  repository_dispatch:
     types: [bridgedb-data-update-event]
   workflow_dispatch:
   schedule:
-  - cron: "0 0 * * 0"
+    - cron: "0 0 * * 0"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: false # to allow multiple runs to queue up rather than clobber
 
+permissions:
+  contents: read
+
 jobs:
   refresh-cache:
     runs-on: ubuntu-latest
+    timeout-minutes: 180
     steps:
-    
-      - name: Checkout wikipathways-database repo
-        uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-          ref: main
 
-      - name: Setup Java
-        uses: actions/setup-java@v5
-        with:
-          distribution: 'temurin'
-          java-version: '11'
-            
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
       - name: Cache linkset-creator jar
-        uses: actions/cache@v5
+        uses: actions/cache@v4
         id: cache-linkset-creator-jar
         with:
           path: ./linkset-creator-v2.0.jar
           key: cached-linkset-creator-v2.0-jar   # static key — version is in the name
-      
+
       - name: Download linkset-creator jar
         if: steps.cache-linkset-creator-jar.outputs.cache-hit != 'true'
         run: |
-          echo "Cache miss — downloading linkset-creator jar"
           wget -O linkset-creator-v2.0.jar \
             https://github.com/CyTargetLinker/linksetCreator/releases/download/v2.0/linkset-creator-v2.0.jar
-      
-      - name: Cache BridgeDb file
-        uses: actions/cache@v5
+
+      - name: Compute the bundle cache key
+        id: key
+        run: echo "key=bridgedb-bundle-$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore or create the BridgeDb bundle
+        uses: actions/cache@v4
         id: cache-bridgedb
         with:
-          path: ${{ github.workspace }}/bridgedb/Hs_Derby_Ensembl_111.bridge
-          key: ${{ runner.os }}-Hs_Derby_Ensembl_111   # static key — no hash needed for versioned file
-      
-      - name: Download BridgeDb file
+          path: bridgedb
+          key: ${{ steps.key.outputs.key }}
+
+      - name: Install jq
+        if: steps.cache-bridgedb.outputs.cache-hit != 'true'
+        run: sudo apt-get install -y jq
+
+      - name: Download every BridgeDb file the repo needs
         if: steps.cache-bridgedb.outputs.cache-hit != 'true'
         run: |
-          echo "Cache miss — downloading BridgeDb bridge file"
-          mkdir -p "${{ github.workspace }}/bridgedb"
-          wget -O "${{ github.workspace }}/bridgedb/Hs_Derby_Ensembl_111.bridge" \
-            "https://figshare.com/ndownloader/files/64796817"
+          set -euo pipefail
+          mkdir -p bridgedb
+          curl -sSL --retry 5 --retry-delay 5 \
+            "https://raw.githubusercontent.com/bridgedb/data/main/gene.json" -o gene.json
+
+          # wikipathways/species.tsv is the repo's species list and is a
+          # superset of what the other linksets use, so caching its species
+          # covers TFLink, Orphanet and ChEMBL too.
+          #
+          # Columns here are code / wp_token / bridgedb_species / syscodes_out /
+          # tier / min_mapped_frac. Note this is NOT the layout of
+          # build/manifest.tsv, which the linkset workflows iterate over and
+          # which carries an extra `organism` column before bridgedb_species.
+          while IFS=$'\t' read -r code wp_token bridgedb_species syscodes tier frac rest; do
+            case "$code" in ''|'#'*) continue ;; esac
+            echo "::group::$code ($bridgedb_species)"
+            url=$(jq -r --arg o "$bridgedb_species" \
+                  '.mappingFiles[] | select(.species==$o) | .downloadURL' gene.json)
+            if [ -z "$url" ] || [ "$url" = "null" ]; then
+              echo "ERROR: no BridgeDb mapping file for '$bridgedb_species' in gene.json"
+              exit 1
+            fi
+            scripts/fetch-bridge.sh "$url" "bridgedb/${code}.bridge"
+            echo "::endgroup::"
+          done < wikipathways/species.tsv
+
+          echo "Bundle contents:"
+          du -sh bridgedb
+          ls -la bridgedb/
+
+      - name: Summary
+        run: |
+          {
+            echo "### BridgeDb bundle"
+            echo
+            echo "Key: \`${{ steps.key.outputs.key }}\`"
+            echo "Cache hit: \`${{ steps.cache-bridgedb.outputs.cache-hit || 'false' }}\`"
+            echo
+            echo "Linkset workflows restore this bundle and skip downloading."
+          } >> "$GITHUB_STEP_SUMMARY"
