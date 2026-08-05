@@ -3,10 +3,12 @@ __pycache__/
 *.pyc
 
 # Downloaded source data
+# TFLink is a prefix match, not *.tsv, so that checked-in tables such as
+# wikipathways/species.tsv are not swallowed. The .gz variants of the large
+# TFLink tables are already covered by *.gz.
 *.gmt
 *.gz
-*.tsv
-*.tsv.gz
+TFLink_*.tsv
 gene2go*
 *.obo
 
@@ -19,6 +21,8 @@ gene.json
 linkset-creator-*.jar
 
 # Generated pipeline outputs
+# CHEMBL_MoA.py writes plain input.txt, which input_*.txt does not match.
+input.txt
 input_*.txt
 *.xgmml
 *.log
