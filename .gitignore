@@ -3,6 +3,7 @@ __pycache__/
 *.pyc
 
 # Downloaded source data
+*.gmt
 *.gz
 gene2go*
 *.obo
@@ -10,6 +11,7 @@ gene2go*
 # BridgeDb identifier-mapping files
 *.bridge
 bridgedb/
+gene.json
 
 # linkset-creator jar (downloaded in CI)
 linkset-creator-*.jar
