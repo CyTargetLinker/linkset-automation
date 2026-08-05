@@ -66,8 +66,10 @@ jobs:
           path: bridgedb
           key: ${{ steps.key.outputs.key }}
 
+      # Unconditional: the metabolite step below needs jq even when the species
+      # bundle hits. (It is preinstalled on ubuntu-latest, but do not rely on
+      # that implicitly.)
       - name: Install jq
-        if: steps.cache-bridgedb.outputs.cache-hit != 'true'
         run: sudo apt-get install -y jq
 
       - name: Download every BridgeDb file the repo needs
@@ -103,13 +105,56 @@ jobs:
           du -sh bridgedb
           ls -la bridgedb/
 
+      # The metabolite mapping file gets its own cache entry rather than joining
+      # the species bundle, for two reasons. It is 2.79 GB on its own, nearly as
+      # much as all 13 species together, and putting it in the weekly bundle
+      # would mean re-uploading it every week and force any consumer that only
+      # wants one species to restore it too. Its filename carries a release date
+      # (metabolites_YYYYMMDD.bridge), so keying on that means it is fetched
+      # once and refreshed only when BridgeDb actually publishes a new one.
+      - name: Resolve the metabolite mapping file
+        id: metab
+        run: |
+          set -euo pipefail
+          curl -sSL --retry 5 --retry-delay 5 \
+            "https://raw.githubusercontent.com/bridgedb/data/main/other.json" -o other.json
+          file=$(jq -r '.mappingFiles[] | select(.type=="Metabolites") | .file' other.json)
+          url=$(jq -r '.mappingFiles[] | select(.type=="Metabolites") | .downloadURL' other.json)
+          if [ -z "$file" ] || [ "$file" = "null" ] || [ -z "$url" ] || [ "$url" = "null" ]; then
+            echo "ERROR: no Metabolites mapping file in other.json"
+            exit 1
+          fi
+          echo "file=$file" >> "$GITHUB_OUTPUT"
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "key=bridgedb-metabolites-${file}" >> "$GITHUB_OUTPUT"
+          echo "Metabolites: $file"
+
+      - name: Restore or create the metabolite cache
+        uses: actions/cache@v4
+        id: cache-metabolites
+        with:
+          path: bridgedb-metabolites
+          key: ${{ steps.metab.outputs.key }}
+
+      - name: Download the metabolite mapping file
+        if: steps.cache-metabolites.outputs.cache-hit != 'true'
+        run: |
+          set -euo pipefail
+          scripts/fetch-bridge.sh "${{ steps.metab.outputs.url }}" \
+            "bridgedb-metabolites/metabolites.bridge"
+          du -sh bridgedb-metabolites
+
       - name: Summary
         run: |
           {
-            echo "### BridgeDb bundle"
+            echo "### BridgeDb caches"
             echo
-            echo "Key: \`${{ steps.key.outputs.key }}\`"
-            echo "Cache hit: \`${{ steps.cache-bridgedb.outputs.cache-hit || 'false' }}\`"
+            echo "| Cache | Key | Hit |"
+            echo "| --- | --- | --- |"
+            echo "| Species bundle | \`${{ steps.key.outputs.key }}\` | \`${{ steps.cache-bridgedb.outputs.cache-hit || 'false' }}\` |"
+            echo "| Metabolites | \`${{ steps.metab.outputs.key }}\` | \`${{ steps.cache-metabolites.outputs.cache-hit || 'false' }}\` |"
             echo
-            echo "Linkset workflows restore this bundle and skip downloading."
+            echo "Linkset workflows restore the species bundle and skip downloading."
+            echo "The metabolite file is cached as \`bridgedb-metabolites/metabolites.bridge\`"
+            echo "for a future metabolite linkset; nothing restores it yet."
           } >> "$GITHUB_STEP_SUMMARY"

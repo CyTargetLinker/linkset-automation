@@ -13,7 +13,9 @@ TFLink_*.tsv
 # BridgeDb identifier-mapping files
 *.bridge
 bridgedb/
+bridgedb-metabolites/
 gene.json
+other.json
 
 # linkset-creator jar (downloaded in CI)
 linkset-creator-*.jar
