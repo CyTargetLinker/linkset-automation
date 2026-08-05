@@ -46,7 +46,12 @@ delay=2
 i=1
 while :; do
   echo "fetching $norm -> $target (attempt $i/$attempts)"
+  # --speed-limit/--speed-time abandon a transfer that drops below 10 kB/s for
+  # a minute, so a stalled connection is retried in ~1 minute rather than
+  # sitting until --max-time. The cap is generous because these files reach
+  # ~840 MB and Figshare is sometimes genuinely slow rather than stuck.
   http=$(curl -sS -L --max-time 1800 \
+              --speed-limit 10240 --speed-time 60 \
               --retry 3 --retry-delay 2 --retry-connrefused \
               -o "$tmp" -w '%{http_code}' "$norm") || http="000"
 
