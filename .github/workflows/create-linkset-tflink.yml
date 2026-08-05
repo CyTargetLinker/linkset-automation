@@ -11,6 +11,10 @@ on:
         description: "Publish even if Zenodo already has this TFLink version"
         type: boolean
         default: false
+      bootstrap_zenodo:
+        description: "One-time: create the initial Zenodo DRAFT (does not publish)"
+        type: boolean
+        default: false
 
 concurrency:
   # Never run two of these at once: the job mutates a Zenodo draft, and a
@@ -29,6 +33,10 @@ env:
   ZENODO_DEPOSITION_ID: ""
   # Concept (all-versions) record, used to read what is currently published.
   ZENODO_CONCEPT_ID: ""
+  # Fraction of gene nodes that must gain BridgeDb cross-references. 0.9 was
+  # carried over from a human-only linkset; fly, worm and yeast may map less
+  # completely, so this is here to be tuned rather than buried in the QC call.
+  MIN_MAPPED_FRAC: "0.9"
 
 jobs:
   create-linksets:
@@ -70,12 +78,15 @@ jobs:
       - name: Install jq
         run: sudo apt-get install -y jq
 
-      - name: Download BridgeDb files (latest figshare URLs from bridgedb/data)
+      - name: Build & QC one linkset per species
         run: |
+          set -euo pipefail
           mkdir -p bridgedb
-          # gene.json in github.com/bridgedb/data holds the latest per-species .bridge URLs.
-          curl -sL "https://raw.githubusercontent.com/bridgedb/data/main/gene.json" -o gene.json
-          ua="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+          # gene.json in github.com/bridgedb/data holds the latest per-species
+          # .bridge URLs as opaque Figshare file ids.
+          curl -sSL --retry 5 --retry-delay 5 \
+            "https://raw.githubusercontent.com/bridgedb/data/main/gene.json" -o gene.json
+
           # "organism (as named in gene.json)|CyTargetLinker short code used by the configs"
           for entry in \
             "Homo sapiens|hsa" \
@@ -84,27 +95,30 @@ jobs:
             "Drosophila melanogaster|dme" \
             "Caenorhabditis elegans|cel" \
             "Saccharomyces cerevisiae|sce"; do
-            org="${entry%|*}"; code="${entry#*|}"
-            url=$(jq -r --arg o "$org" '.mappingFiles[] | select(.species==$o) | .downloadURL' gene.json)
-            # figshare needs the ndownloader host + a browser UA/Referer
-            norm="${url/https:\/\/figshare.com\/ndownloader/https:\/\/ndownloader.figshare.com}"
-            echo "Downloading $code bridge ($org) from $norm"
-            wget --quiet --user-agent="$ua" --header="Referer: https://figshare.com/" \
-              -O "bridgedb/${code}.bridge" "$norm"
-            unzip -t "bridgedb/${code}.bridge" >/dev/null 2>&1 || { echo "BAD ZIP: ${code}.bridge"; exit 1; }
-          done
-          ls -la bridgedb/
+            organism="${entry%|*}"; code="${entry#*|}"
+            echo "::group::$code ($organism)"
+            url=$(jq -r --arg o "$organism" \
+                  '.mappingFiles[] | select(.species==$o) | .downloadURL' gene.json)
+            if [ -z "$url" ] || [ "$url" = "null" ]; then
+              echo "ERROR: no BridgeDb mapping file for '$organism' in gene.json"
+              exit 1
+            fi
+            scripts/fetch-bridge.sh "$url" "bridgedb/${code}.bridge"
 
-      - name: Create & QC one linkset per species
-        run: |
-          for code in hsa mmu rno dme cel sce; do
-            echo "=== $code ==="
             java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
               -c "tflink/tflink_${code}.config" \
               -i "input_${code}.txt" \
               -o "tflink_${code}.xgmml"
+
             python3 scripts/qc_xgmml.py --min-nodes 1 --min-edges 1 \
-              --mapped-type gene --min-mapped-frac 0.9 "tflink_${code}.xgmml"
+              --mapped-type gene --min-mapped-frac "${MIN_MAPPED_FRAC}" \
+              "tflink_${code}.xgmml"
+
+            # The .bridge files are large and six of them will not fit
+            # alongside the built linksets on a runner.
+            rm -f "bridgedb/${code}.bridge"
+            df -h --output=avail / | tail -1
+            echo "::endgroup::"
           done
           ls -la tflink_*.xgmml
 
@@ -129,6 +143,13 @@ jobs:
           if [ "${{ inputs.skip_zenodo }}" = "true" ]; then
             echo "skip_zenodo requested; not publishing"
             echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ inputs.bootstrap_zenodo }}" = "true" ]; then
+            echo "bootstrap requested; creating the initial draft instead of publishing"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "bootstrap=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
 
@@ -168,6 +189,86 @@ jobs:
           fi
 
           echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Bootstrap the initial Zenodo draft
+        if: steps.gate.outputs.bootstrap == 'true'
+        run: |
+          set -euo pipefail
+          if [ -n "${ZENODO_DEPOSITION_ID}" ]; then
+            echo "ZENODO_DEPOSITION_ID is already set to ${ZENODO_DEPOSITION_ID}."
+            echo "Bootstrap is a one-time action; refusing to create a second record."
+            exit 1
+          fi
+
+          version="${{ steps.gate.outputs.version }}"
+          n_species=$(ls -1 tflink_*.xgmml | wc -l)
+
+          created=$(curl -sS --fail -X POST \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{}' "https://zenodo.org/api/deposit/depositions")
+
+          dep_id=$(echo "$created" | jq -r '.id')
+          concept_id=$(echo "$created" | jq -r '.conceptrecid')
+          bucket=$(echo "$created" | jq -r '.links.bucket')
+          if [ "$dep_id" = "null" ] || [ -z "$dep_id" ]; then
+            echo "Failed to create deposition. Response: $created"
+            exit 1
+          fi
+
+          for f in tflink_*.xgmml; do
+            echo "Uploading $f..."
+            curl --fail --progress-bar \
+              -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+              --upload-file "$f" "$bucket/$f"
+          done
+
+          description="<p>This dataset contains linkset networks of transcription factor - target gene interactions from TFLink ${version}, in XGMML format, for ${n_species} species.</p><p>Derived from TFLink (https://tflink.net), which is freely available for non-commercial use. Redistributed under CC BY-NC 4.0 accordingly.</p>"
+          metadata=$(jq -n \
+            --arg title "TFLink Linksets" \
+            --arg version "$version" \
+            --arg date "$(date +%Y-%m-%d)" \
+            --argjson communities '[{"identifier": "cytargetlinker"}]' \
+            --arg description "$description" \
+            --argjson creators '[
+              {"name": "Kutmon, Martina", "affiliation": "Maastricht University", "orcid": "0000-0002-7699-8191"},
+              {"name": "Martens, Marvin", "affiliation": "Maastricht University", "orcid": "0000-0003-2230-0840"},
+              {"name": "Ehrhart, Friederike", "affiliation": "Maastricht University", "orcid": "0000-0002-7770-620X"}
+            ]' \
+            --argjson related_identifiers '[
+              {"identifier": "10.1093/database/baac083", "relation": "isDerivedFrom", "resource_type": "publication-article", "scheme": "doi"},
+              {"identifier": "10.12688/f1000research.14613.1", "relation": "references", "resource_type": "publication-article", "scheme": "doi"}
+            ]' \
+            '{ metadata: {
+                 title: $title, version: $version, publication_date: $date,
+                 description: $description, access_right: "open",
+                 upload_type: "dataset", language: "eng",
+                 license: "cc-by-nc-4.0", creators: $creators,
+                 related_identifiers: $related_identifiers,
+                 references: ["Liska O et al (2022) TFLink. Database, baac083. https://doi.org/10.1093/database/baac083"],
+                 communities: $communities } }')
+
+          curl -sS --fail -X PUT \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data "$metadata" \
+            "https://zenodo.org/api/deposit/depositions/${dep_id}" > /dev/null
+
+          {
+            echo "### TFLink Zenodo draft created"
+            echo
+            echo "The draft is **not published** — review it, then publish it once by hand."
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| Draft | https://zenodo.org/deposit/${dep_id} |"
+            echo "| \`ZENODO_DEPOSITION_ID\` | \`${dep_id}\` |"
+            echo "| \`ZENODO_CONCEPT_ID\` | \`${concept_id}\` |"
+            echo
+            echo "Put both IDs in the \`env:\` block of this workflow. After the draft is"
+            echo "published, later runs version the record automatically."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "deposition=${dep_id} concept=${concept_id}"
 
       - name: Discard current Zenodo draft
         if: steps.gate.outputs.publish == 'true'
