@@ -26,9 +26,27 @@ than a paper's license statement, the FAQ suggests contacting the authors.
 
 ## Species
 
-Six species have small-scale data and are built: human, mouse, rat, fruit fly,
-*C. elegans* and yeast. Zebrafish is excluded because TFLink has no small-scale
-data for it.
+Five species are built: human, mouse, yeast, fruit fly and *C. elegans*.
+Small-scale interaction counts in TFLink v1.0:
+
+| Species | Code | SS interactions |
+| --- | --- | --- |
+| *Homo sapiens* | `hsa` | 16,634 |
+| *Mus musculus* | `mmu` | 8,687 |
+| *Saccharomyces cerevisiae* | `sce` | 5,349 |
+| *Drosophila melanogaster* | `dme` | 699 |
+| *Caenorhabditis elegans* | `cel` | 109 |
+| *Rattus norvegicus* | — | 8 (excluded) |
+| *Danio rerio* | — | none |
+
+Rat is excluded because 8 interactions build a 12-node network rather than a
+usable linkset — not for lack of BridgeDb coverage, which is fine for rat. Add
+it back to `SPECIES` in `tflink.py`, with a matching config, if a later TFLink
+release carries real small-scale rat data. Zebrafish has no small-scale data at
+all.
+
+Unlike the other resources, **both ends of an edge are genes** — the TF and its
+target — so both are mapped through BridgeDb.
 
 Unlike the other resources, **both ends of an edge are genes** — the TF and its
 target — so both are mapped through BridgeDb.
