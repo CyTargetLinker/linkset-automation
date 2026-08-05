@@ -29,7 +29,8 @@ yet and the deposit license is still undecided.
 | Resource | Interactions | Workflow | Outstanding |
 | --- | --- | --- | --- |
 | [Orphanet](https://www.orphadata.com/) | gene–rare disease | [`Create_OrphanetLinkset.yml`](.github/workflows/Create_OrphanetLinkset.yml) | Zenodo deposit; [`Orphanet/readme.md`](Orphanet/readme.md) is still a placeholder |
-| [ChEMBL](https://www.ebi.ac.uk/chembl/) | compound–protein target (mechanism of action) | [`Chembl_MoA.yml`](.github/workflows/Chembl_MoA.yml) | workflow is not passing yet; Zenodo deposit; [`CHEMBL/readme.md`](CHEMBL/readme.md) is still a placeholder |
+| [ChEMBL](https://www.ebi.ac.uk/chembl/) | compound–protein target (mechanism of action) | [`Chembl_MoA.yml`](.github/workflows/Chembl_MoA.yml) | Zenodo deposit |
+| [Reactome](https://reactome.org/) | pathway–gene, human | [`create-linkset-reactome.yml`](.github/workflows/create-linkset-reactome.yml) | Zenodo bootstrap; whether orthology-inferred species should ship |
 
 ## Candidates
 
@@ -40,7 +41,6 @@ Databases we would like to automate. No workflow yet.
 | DISEASES | disease–gene associations | https://diseases.jensenlab.org/Downloads |
 | CTD | chemical–target, chemical–disease, chemical–pathway | https://ctdbase.org/downloads |
 | TRRUST | transcription factor–target | https://www.grnpedia.org/trrust/ |
-| Reactome | pathway–gene | https://reactome.org/ |
 | CollecTRI | transcription factor–target | https://github.com/saezlab/collecTRI |
 
 ## License limitation

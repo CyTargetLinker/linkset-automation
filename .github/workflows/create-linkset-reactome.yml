@@ -1,0 +1,377 @@
+name: Create Reactome linksets
+
+on:
+  workflow_dispatch:
+    inputs:
+      species:
+        description: "Space-separated codes to build (default: all enabled in species.tsv)"
+        required: false
+        type: string
+      version:
+        description: "Reactome release number to build (default: the current one)"
+        required: false
+        type: string
+      skip_zenodo:
+        description: "Build and QC only, do not touch Zenodo"
+        type: boolean
+        default: false
+      force_publish:
+        description: "Publish even if Zenodo already has this Reactome release"
+        type: boolean
+        default: false
+      bootstrap_zenodo:
+        description: "Create the first Zenodo draft (one-time; does not publish)"
+        type: boolean
+        default: false
+  # No cron yet. Reactome releases quarterly, but a schedule is only worth
+  # adding once the record exists: until ZENODO_DEPOSITION_ID is set every run
+  # would build, validate and then decline to publish. Add one after bootstrap.
+
+concurrency:
+  # Never run two of these at once: the job mutates a Zenodo draft, and a
+  # cancelled run would leave one dangling.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # Reactome has never been deposited. Dispatch once with bootstrap_zenodo to
+  # create the first draft, then paste the two ids it prints in here.
+  ZENODO_DEPOSITION_ID: ""
+  ZENODO_CONCEPT_ID: ""
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+
+      - name: Checkout repo
+        uses: actions/checkout@v7
+
+      - name: Restore linkset-creator jar from cache
+        uses: actions/cache@v6
+        id: cache-jar
+        with:
+          path: ./linkset-creator-v2.0.jar
+          key: cached-linkset-creator-v2.0-jar
+
+      - name: Download linkset-creator jar if cache missed
+        if: steps.cache-jar.outputs.cache-hit != 'true'
+        run: |
+          wget -O linkset-creator-v2.0.jar \
+            https://github.com/CyTargetLinker/linksetCreator/releases/download/v2.0/linkset-creator-v2.0.jar
+
+      - name: Setup Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "11"
+
+      - name: Setup Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.x"
+
+      - name: Install dependencies
+        run: pip3 install requests
+
+      # Resolves the Reactome release, writes input_<code>.txt and a generated
+      # reactome/config/reactome_<code>.config per species, and writes
+      # build/manifest.tsv listing the species it actually built. Every later
+      # step iterates the manifest, so a species skipped here cannot leave a
+      # step looking for a file that was never produced.
+      - name: Preprocess the Reactome pathway-gene table
+        # Inputs are passed through the environment rather than interpolated
+        # into the script, so their contents cannot be executed as shell.
+        env:
+          IN_VERSION: ${{ inputs.version }}
+          IN_SPECIES: ${{ inputs.species }}
+        run: |
+          set -euo pipefail
+          args=()
+          if [ -n "$IN_VERSION" ]; then
+            args+=(--version "$IN_VERSION")
+          fi
+          if [ -n "$IN_SPECIES" ]; then
+            # Deliberately unquoted: the input is space-separated codes.
+            args+=(--species $IN_SPECIES)
+          fi
+          python3 reactome/reactome.py ${args[@]+"${args[@]}"}
+          echo "REACTOME_RELEASE=$(cat build/version.txt)" >> "$GITHUB_ENV"
+          cat build/manifest.tsv
+
+      # Restore-only: update-bridgedb owns this cache. On a hit fetch-bridge.sh
+      # finds each file already present and valid and returns immediately.
+      - name: Restore the BridgeDb bundle
+        uses: actions/cache/restore@v6
+        with:
+          path: bridgedb
+          key: bridgedb-bundle-none
+          restore-keys: bridgedb-bundle-
+
+      - name: Build linksets
+        run: |
+          set -euo pipefail
+          mkdir -p bridgedb
+          curl -sSL --retry 5 --retry-delay 5 \
+            "https://raw.githubusercontent.com/bridgedb/data/main/gene.json" -o gene.json
+
+          # Process substitution, not a pipe: a pipe would run the loop body in
+          # a subshell, where `exit 1` would end only the subshell.
+          while IFS=$'\t' read -r code token organism bridgedb_species rest; do
+            echo "::group::$code ($organism)"
+            url=$(jq -r --arg o "$bridgedb_species" \
+                  '.mappingFiles[] | select(.species==$o) | .downloadURL' gene.json)
+            if [ -z "$url" ] || [ "$url" = "null" ]; then
+              echo "ERROR: no BridgeDb mapping file for '$bridgedb_species' in gene.json"
+              exit 1
+            fi
+            scripts/fetch-bridge.sh "$url" "bridgedb/${code}.bridge"
+
+            java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
+              -c "reactome/config/reactome_${code}.config" \
+              -i "input_${code}.txt" \
+              -o "reactome_${code}.xgmml"
+
+            rm -f "bridgedb/${code}.bridge"
+            df -h --output=avail / | tail -1
+            echo "::endgroup::"
+          done < <(tail -n +2 build/manifest.tsv)
+          ls -la reactome_*.xgmml
+
+      # Any failure here fails the whole run and nothing is published: a partial
+      # publish would mint a permanent DOI on an incomplete record.
+      - name: QC validate linksets
+        run: |
+          set -euo pipefail
+          while IFS=$'\t' read -r code token organism bridgedb_species syscodes frac rest; do
+            echo "::group::QC $code"
+            python3 scripts/qc_xgmml.py \
+              --min-nodes 1 --min-edges 1 \
+              --mapped-type gene --min-mapped-frac "$frac" \
+              --labelled-type gene \
+              "reactome_${code}.xgmml"
+            echo "::endgroup::"
+          done < <(tail -n +2 build/manifest.tsv)
+
+          built=$(ls -1 reactome_*.xgmml | wc -l)
+          expected=$(( $(wc -l < build/manifest.tsv) - 1 ))
+          if [ "$built" -ne "$expected" ]; then
+            echo "ERROR: built $built linkset(s) but the manifest lists $expected"
+            exit 1
+          fi
+          echo "$built linkset(s) built and validated"
+
+      - name: Upload linkset artifacts
+        uses: actions/upload-artifact@v7
+        with:
+          name: reactome-linksets-${{ env.REACTOME_RELEASE }}
+          path: |
+            reactome_*.xgmml
+            build/manifest.tsv
+
+      - name: Decide whether to publish
+        id: gate
+        run: |
+          set -euo pipefail
+          version="$(cat build/version.txt)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "bootstrap=false" >> "$GITHUB_OUTPUT"
+
+          if [ "${{ inputs.skip_zenodo }}" = "true" ]; then
+            echo "skip_zenodo requested; not publishing"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ "${{ inputs.bootstrap_zenodo }}" = "true" ]; then
+            echo "bootstrap requested; creating the initial draft instead of publishing"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "bootstrap=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "${ZENODO_CONCEPT_ID}" ]; then
+            echo "No Zenodo record exists for Reactome yet. Dispatch once with"
+            echo "bootstrap_zenodo to create the first draft, then set"
+            echo "ZENODO_DEPOSITION_ID and ZENODO_CONCEPT_ID in this workflow."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          zen=$(curl -sSL --retry 3 "https://zenodo.org/api/records/${ZENODO_CONCEPT_ID}")
+          zen_version=$(echo "$zen" | jq -r '.metadata.version // ""')
+          echo "Reactome release: $version | Zenodo latest: $zen_version"
+
+          if [ "$zen_version" = "$version" ] && [ "${{ inputs.force_publish }}" != "true" ]; then
+            echo "Zenodo already publishes Reactome $version; nothing new to release."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Both versions are the release integer zero-padded to three digits,
+          # which is what makes this string compare safe. Unpadded, "100" sorts
+          # before "97" and publishing would silently stop at release 100.
+          if [ -n "$zen_version" ] && [ "$version" \< "$zen_version" ]; then
+            echo "Built Reactome $version, but Zenodo already publishes the newer $zen_version."
+            echo "Refusing to publish an older release."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Zenodo versions are immutable, so never publish a record that has
+          # lost a species relative to the last one.
+          missing=$(comm -23 \
+            <(echo "$zen" | jq -r '.files[].key' | sort) \
+            <(ls -1 reactome_*.xgmml | sort) || true)
+          if [ -n "$missing" ]; then
+            echo "ERROR: these previously published files are absent from this build:"
+            echo "$missing"
+            echo "Refusing to publish a shrinking record. Re-run with force_publish if intended."
+            exit 1
+          fi
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Bootstrap the initial Zenodo draft
+        if: steps.gate.outputs.bootstrap == 'true'
+        run: |
+          set -euo pipefail
+          if [ -n "${ZENODO_DEPOSITION_ID}" ]; then
+            echo "ZENODO_DEPOSITION_ID is already set to ${ZENODO_DEPOSITION_ID}."
+            echo "Bootstrap is a one-time action; refusing to create a second record."
+            exit 1
+          fi
+
+          version="${{ steps.gate.outputs.version }}"
+          n_species=$(ls -1 reactome_*.xgmml | wc -l)
+
+          created=$(curl -sS --fail -X POST \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -d '{}' "https://zenodo.org/api/deposit/depositions")
+
+          dep_id=$(echo "$created" | jq -r '.id')
+          concept_id=$(echo "$created" | jq -r '.conceptrecid')
+          bucket=$(echo "$created" | jq -r '.links.bucket')
+          if [ "$dep_id" = "null" ] || [ -z "$dep_id" ]; then
+            echo "Failed to create deposition. Response: $created"
+            exit 1
+          fi
+
+          for f in reactome_*.xgmml; do
+            echo "Uploading $f..."
+            curl --fail --progress-bar \
+              -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+              --upload-file "$f" "$bucket/$f"
+          done
+
+          curl -sS --fail -X PUT \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            --data "$(bash reactome/zenodo-metadata.sh "$version" "$n_species")" \
+            "https://zenodo.org/api/deposit/depositions/${dep_id}" > /dev/null
+
+          echo "Created draft deposition ${dep_id} (concept ${concept_id})."
+          echo "It is NOT published: minting a DOI cannot be undone, so review it"
+          echo "at https://zenodo.org/me/uploads and publish by hand. Then set"
+          echo "ZENODO_DEPOSITION_ID=${dep_id} and ZENODO_CONCEPT_ID=${concept_id}"
+          echo "in .github/workflows/create-linkset-reactome.yml."
+
+      - name: Discard current Zenodo draft
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          discard_response=$(curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "https://zenodo.org/api/deposit/depositions/${ZENODO_DEPOSITION_ID}/actions/discard")
+          echo "Discard Response: $discard_response"
+          # Non-fatal: no existing draft is fine.
+
+      - name: Create a new version of the deposition
+        id: new_version
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          response=$(curl -s -X POST \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "https://zenodo.org/api/deposit/depositions/${ZENODO_DEPOSITION_ID}/actions/newversion")
+
+          new_draft_url=$(echo "$response" | jq -r '.links.latest_draft')
+          if [[ "$new_draft_url" == "null" || -z "$new_draft_url" ]]; then
+            echo "Failed to retrieve the latest draft URL. Response was: $response"
+            exit 1
+          fi
+
+          new_draft_response=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "$new_draft_url")
+
+          new_deposition_id=$(echo "$new_draft_response" | jq -r '.id')
+          new_bucket_url=$(echo "$new_draft_response" | jq -r '.links.bucket')
+
+          if [[ "$new_deposition_id" == "null" || -z "$new_deposition_id" ]]; then
+            echo "Failed to retrieve the new deposition ID. Response was: $new_draft_response"
+            exit 1
+          fi
+
+          echo "New Deposition ID: $new_deposition_id"
+          echo "new_deposition_id=$new_deposition_id" >> $GITHUB_ENV
+          echo "new_bucket_url=$new_bucket_url" >> $GITHUB_ENV
+
+      - name: Clear inherited files from the new draft
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          # A new Zenodo version is created as a copy of the previous one,
+          # including its files. Remove them so this version carries only the
+          # freshly built linksets.
+          files=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/files")
+          echo "$files" | jq -r '.[].id' | while read -r file_id; do
+            [ -z "$file_id" ] && continue
+            echo "Deleting inherited file $file_id"
+            curl -s -X DELETE \
+              -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+              "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/files/$file_id"
+          done
+
+      - name: Upload linksets to Zenodo
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          for f in reactome_*.xgmml; do
+            echo "Uploading $f..."
+            curl --fail --progress-bar \
+              -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+              --upload-file "$f" \
+              "${{ env.new_bucket_url }}/$f"
+          done
+
+      - name: Update metadata for the new version
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+          version="$(cat build/version.txt)"
+          n_species=$(( $(wc -l < build/manifest.tsv) - 1 ))
+          curl -s \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -X PUT \
+            --data "$(bash reactome/zenodo-metadata.sh "$version" "$n_species")" \
+            "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}"
+
+      - name: Publish updated Zenodo record
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          publish_response=$(curl -s \
+            -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            -H "Content-Type: application/json" \
+            -X POST \
+            "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/actions/publish")
+          if echo "$publish_response" | jq -e '.status == "error"' > /dev/null 2>&1; then
+            echo "Publishing failed! Response: $publish_response"
+            exit 1
+          fi
+          echo "Published successfully. DOI: $(echo "$publish_response" | jq -r '.doi')"
