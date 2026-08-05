@@ -1,4 +1,10 @@
 # linkset-automation
+
+[![WikiPathways linkset](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/create-linkset-wikipathways.yml?label=WikiPathways%20linkset)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/create-linkset-wikipathways.yml)
+[![GO linkset](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/create-linkset-go.yml?label=GO%20linkset)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/create-linkset-go.yml)
+[![QC XGMML](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/qc-xgmml.yml?label=QC%20XGMML)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/qc-xgmml.yml)
+[![BridgeDb cache](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/update-bridgedb.yml?label=BridgeDb%20cache)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/update-bridgedb.yml)
+
 Under construction: This repo automatically generates CyTargetLinker linksets from different resources, starting with WikiPathways.
 
 <img width="692" height="347" alt="image" src="https://github.com/user-attachments/assets/100e64c0-d6e5-47c9-8686-7be01c39c257" />
@@ -11,7 +17,7 @@ updated once a resource is built and deposited.
 
 | Resource | Persistent DOI | License |
 | --- | --- | --- |
-| [WikiPathways](https://www.wikipathways.org) (human, mouse, rat) | [10.5281/zenodo.4500957](https://doi.org/10.5281/zenodo.4500957) | CC BY 4.0 |
+| [WikiPathways](https://www.wikipathways.org) (human, mouse, rat) | [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4500957.svg)](https://doi.org/10.5281/zenodo.4500957) | CC BY 4.0 |
 | [Gene Ontology](https://geneontology.org) (BP / MF / CC, human) | not yet deposited | CC BY 4.0 |
 | [TFLink](https://tflink.net) | not yet deposited | Free for non-commercial use |
 | [ChEMBL](https://www.ebi.ac.uk/chembl/) (mechanism of action) | not yet deposited | CC BY-SA 3.0 |
