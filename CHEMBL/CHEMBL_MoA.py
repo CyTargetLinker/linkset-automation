@@ -1,6 +1,8 @@
 from chembl_webresource_client.new_client import new_client
 from chembl_webresource_client.settings import Settings
 import pandas as pd
+import re
+import sys
 from datetime import datetime
 
 Settings.Instance().TIMEOUT = 60
@@ -118,16 +120,17 @@ def download_all_mechanism_data(limit_compounds=None, human_only=False, tqdm_cla
                             try:
                                 target_data = target.get(target_id)
                                 if target_data:
-                                    uniprot_ids  = []
-                                    gene_symbols = []  # from target_component_synonyms GENE_SYMBOL
-                                    hgnc_ids     = []  # from target_component_xrefs HGNC
+                                    components = []
 
                                     for component in target_data.get('target_components', []) or []:
+                                        symbol  = ''
+                                        hgnc    = ''
+                                        uniprot = component.get('accession', '') or ''
 
                                         # ── Gene symbol: confirmed key is target_component_synonyms ──
                                         for syn in component.get('target_component_synonyms', []) or []:
                                             if syn.get('syn_type') == 'GENE_SYMBOL':
-                                                gene_symbols.append(syn.get('component_synonym', ''))
+                                                symbol = syn.get('component_synonym', '') or ''
                                                 break  # one gene symbol per component
 
                                         # ── xrefs: UniProt and HGNC ──
@@ -135,23 +138,28 @@ def download_all_mechanism_data(limit_compounds=None, human_only=False, tqdm_cla
                                             src   = xref.get('xref_src_db', '')
                                             xid   = xref.get('xref_id', '')
                                             xname = xref.get('xref_name', '')
-                                            if src == 'UniProt':
-                                                uniprot_ids.append(xid)
+                                            if src == 'UniProt' and not uniprot:
+                                                uniprot = xid
                                             elif src == 'HGNC':
-                                                hgnc_ids.append(xid)
+                                                hgnc = xid
                                                 # xref_name is the gene symbol e.g. "CA1"
                                                 # use as fallback if target_component_synonyms was empty
-                                                if xname and xname not in gene_symbols:
-                                                    gene_symbols.append(xname)
+                                                if xname and not symbol:
+                                                    symbol = xname
+
+                                        if symbol or hgnc:
+                                            components.append({
+                                                'uniprot_accessions': uniprot,
+                                                'gene_symbol'       : symbol,
+                                                'hgnc_id'           : hgnc,
+                                            })
 
                                     target_info = {
                                         'target_chembl_id'  : target_id,
                                         'target_name'       : target_data.get('pref_name', ''),
                                         'target_type'       : target_data.get('target_type', ''),
                                         'target_organism'   : target_data.get('organism', ''),
-                                        'uniprot_accessions': ';'.join(filter(None, uniprot_ids)),
-                                        'gene_symbol'       : ';'.join(filter(None, gene_symbols)),
-                                        'hgnc_id'           : ';'.join(filter(None, hgnc_ids)),
+                                        'components'        : components,
                                     }
                                     target_cache[target_id] = target_info
 
@@ -161,9 +169,7 @@ def download_all_mechanism_data(limit_compounds=None, human_only=False, tqdm_cla
                                     'target_name'       : '',
                                     'target_type'       : '',
                                     'target_organism'   : mechanism_data.get('target_organism', ''),
-                                    'uniprot_accessions': '',
-                                    'gene_symbol'       : '',
-                                    'hgnc_id'           : '',
+                                    'components'        : [],
                                 }
                                 target_cache[target_id] = target_info
 
@@ -196,15 +202,22 @@ def download_all_mechanism_data(limit_compounds=None, human_only=False, tqdm_cla
                         'target_name'        : target_info.get('target_name', ''),
                         'target_type'        : target_info.get('target_type', ''),
                         'target_organism'    : target_info.get('target_organism', mechanism_data.get('target_organism', '')),
-                        'uniprot_accessions' : target_info.get('uniprot_accessions', ''),
-                        'gene_symbol'        : target_info.get('gene_symbol', ''),
-                        'hgnc_id'            : target_info.get('hgnc_id', ''),
+                        'uniprot_accessions' : '',
+                        'gene_symbol'        : '',
+                        'hgnc_id'            : '',
                         # ── References ────────────────────────────────────────────
                         'ref_id'             : mechanism_refs[0].get('ref_id', '')   if mechanism_refs else '',
                         'ref_type'           : mechanism_refs[0].get('ref_type', '') if mechanism_refs else '',
                         'ref_url'            : mechanism_refs[0].get('ref_url', '')  if mechanism_refs else '',
                     }
-                    all_data.append(record)
+
+                    # one row per target component; see CHEMBL/readme.md
+                    for component in (target_info.get('components') or [{}]):
+                        row = dict(record)
+                        row['uniprot_accessions'] = component.get('uniprot_accessions', '')
+                        row['gene_symbol']        = component.get('gene_symbol', '')
+                        row['hgnc_id']            = component.get('hgnc_id', '')
+                        all_data.append(row)
 
                 except Exception:
                     continue
@@ -218,7 +231,13 @@ def download_all_mechanism_data(limit_compounds=None, human_only=False, tqdm_cla
         return None
 
     df = pd.DataFrame(all_data)
-    df_unique = df.drop_duplicates(subset=['mechanism_id'])
+    df_unique = df.drop_duplicates(subset=['mechanism_id', 'gene_symbol', 'hgnc_id'])
+
+    # Rows must stay full width for the jar's split(); see CHEMBL/readme.md.
+    df_unique = df_unique.map(
+        lambda v: re.sub(r'[\r\n\t]+', ' ', v).strip() if isinstance(v, str) else v
+    )
+    df_unique['row_end'] = '.'
 
     filename = 'input.txt'
     df_unique.to_csv(filename, index=False, sep='\t')
@@ -258,12 +277,19 @@ if __name__ == "__main__":
             def __exit__(self, *args): print(f"  {self.desc}: Complete")
         tqdm_class = SimpleTqdm
 
+    # --limit N caps the compounds fetched, for a smoke test.
+    limit = None
+    if '--limit' in sys.argv:
+        limit = int(sys.argv[sys.argv.index('--limit') + 1])
+        print(f"SMOKE TEST: limiting to {limit} compounds")
+
     total = get_all_mechanisms_count()
     if not total:
         print("Could not get count. Exiting.")
         exit()
 
-    data = download_all_mechanism_data(human_only=True, tqdm_class=tqdm_class)
+    data = download_all_mechanism_data(human_only=True, limit_compounds=limit,
+                                       tqdm_class=tqdm_class)
     if data is not None:
         print(f"\nDone! End time: {datetime.now()}")
     else:

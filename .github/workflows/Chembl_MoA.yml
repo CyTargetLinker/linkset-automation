@@ -139,7 +139,8 @@ jobs:
             --min-nodes 1 \
             --min-edges 1 \
             --mapped-type gene \
-            --min-mapped-frac 0.8 \
+            --min-mapped-frac 0.9 \
+            --labelled-type gene \
             "ChEMBL_MechanismOfAction.xgmml"
 
       - name: Upload linkset artifact
