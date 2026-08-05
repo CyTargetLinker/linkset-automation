@@ -63,7 +63,7 @@ jobs:
         run: pip3 install requests
 
       - name: Run Orphanet preprocessing
-        run: python3 Orphanet/Orphanet.py
+        run: python3 Orphanet/orphadata_diseases_genes.py
 
       - name: Install jq
         run: sudo apt-get install -y jq
