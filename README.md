@@ -20,6 +20,7 @@ updated once a resource is built and deposited.
 | [WikiPathways](https://www.wikipathways.org) (13 species) | [`wikipathways/`](wikipathways/readme.md) | [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4500957.svg)](https://doi.org/10.5281/zenodo.4500957) | CC BY 4.0 |
 | [TFLink](https://tflink.net) (5 species) | [`tflink/`](tflink/readme.md) | [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.21804828.svg)](https://doi.org/10.5281/zenodo.21804828) | CC BY-NC 4.0 |
 | [ChEMBL](https://www.ebi.ac.uk/chembl/) (mechanism of action) | [`CHEMBL/`](CHEMBL/readme.md) | not yet deposited | CC BY-SA 3.0 |
+| [Orphanet](https://www.orphadata.com/) | [`Orphanet/`](Orphanet/readme.md) | not yet deposited | CC BY 4.0 |
 
 Each resource name links to its upstream source, and the Details column links to
 that resource's own readme — how it is built, how to update it to a new release,
