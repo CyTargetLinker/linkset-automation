@@ -91,6 +91,6 @@ no spoofed user-agent and accepts only an explicit 200 that passes a zip test.
 
 The GMT contains only Entrez Gene IDs, so `wp.py` writes the same value into
 both the `gene_id` and `gene_symbol` columns and gene nodes are labelled with
-numbers in Cytoscape. The GO linkset avoids this by joining symbols in from NCBI
-`gene_info`; fixing it here needs either that or a return to the SPARQL
-endpoint.
+numbers in Cytoscape. Fixing it needs a symbol lookup after the GMT parse — NCBI
+`gene_info` maps GeneID to Symbol — or a return to the SPARQL endpoint, whose
+query returned a `GeneName` column.

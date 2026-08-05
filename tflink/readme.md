@@ -20,7 +20,7 @@ distribution and reproduction provided the original work is cited.
 
 The linkset is therefore deposited as **CC BY-NC 4.0** — the most permissive
 license consistent with the source. Note this is more restrictive than the
-CC BY 4.0 used for WikiPathways and GO, and an NC license is not "open" in the
+CC BY 4.0 used for WikiPathways, and an NC license is not "open" in the
 Open Definition sense. If TFLink's terms ever need to be relied on more firmly
 than a paper's license statement, the FAQ suggests contacting the authors.
 
