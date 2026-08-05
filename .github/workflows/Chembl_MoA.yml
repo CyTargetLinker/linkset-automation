@@ -80,6 +80,21 @@ jobs:
       - name: Install jq
         run: sudo apt-get install -y jq
 
+      # Restore-only: the weekly update-bridgedb workflow owns this cache. On a
+      # hit fetch-bridge.sh finds the file already present and valid and
+      # returns immediately; on a miss it downloads as usual, so a linkset run
+      # never depends on the weekly job having succeeded.
+      - name: Compute the BridgeDb bundle key
+        id: bridgekey
+        run: echo "key=bridgedb-bundle-$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the BridgeDb bundle
+        uses: actions/cache/restore@v4
+        with:
+          path: bridgedb
+          key: ${{ steps.bridgekey.outputs.key }}
+          restore-keys: bridgedb-bundle-
+
       - name: Download Homo sapiens BridgeDb file
         run: |
           set -euo pipefail
@@ -104,23 +119,7 @@ jobs:
             exit 1
           fi
 
-          normalized_url="${url/https:\/\/figshare.com\/ndownloader/https:\/\/ndownloader.figshare.com}"
-
-          user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
-
-          echo "Downloading Homo sapiens BridgeDb file from $normalized_url"
-
-          wget \
-            --quiet \
-            --user-agent="$user_agent" \
-            --header="Referer: https://figshare.com/" \
-            -O "bridgedb/hsa.bridge" \
-            "$normalized_url"
-
-          unzip -t bridgedb/hsa.bridge >/dev/null 2>&1 || {
-            echo "Invalid BridgeDb file: bridgedb/hsa.bridge"
-            exit 1
-          }
+          scripts/fetch-bridge.sh "$url" "bridgedb/hsa.bridge"
 
           ls -la bridgedb/
 

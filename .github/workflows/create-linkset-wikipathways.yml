@@ -106,6 +106,21 @@ jobs:
 
       # One species at a time, deleting each .bridge right after use: the full
       # set is a few GB, but peak disk stays at the largest single file.
+      # Restore-only: the weekly update-bridgedb workflow owns this cache. On a
+      # hit fetch-bridge.sh finds each file already present and valid and
+      # returns immediately; on a miss it downloads as usual, so a linkset run
+      # never depends on the weekly job having succeeded.
+      - name: Compute the BridgeDb bundle key
+        id: bridgekey
+        run: echo "key=bridgedb-bundle-$(date -u +%G-%V)" >> "$GITHUB_OUTPUT"
+
+      - name: Restore the BridgeDb bundle
+        uses: actions/cache/restore@v4
+        with:
+          path: bridgedb
+          key: ${{ steps.bridgekey.outputs.key }}
+          restore-keys: bridgedb-bundle-
+
       - name: Build linksets
         run: |
           set -euo pipefail
