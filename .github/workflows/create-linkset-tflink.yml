@@ -232,7 +232,7 @@ jobs:
             ]' \
             --argjson related_identifiers '[
               {"identifier": "10.1093/database/baac083", "relation": "isDerivedFrom", "resource_type": "publication-article", "scheme": "doi"},
-              {"identifier": "10.12688/f1000research.14613.1", "relation": "references", "resource_type": "publication-article", "scheme": "doi"}
+              {"identifier": "10.12688/f1000research.14613.2", "relation": "references", "resource_type": "publication-article", "scheme": "doi"}
             ]' \
             '{ metadata: {
                  title: $title, version: $version, publication_date: $date,
@@ -355,7 +355,7 @@ jobs:
             ]' \
             --argjson related_identifiers '[
               {"identifier": "10.1093/database/baac083", "relation": "isDerivedFrom", "resource_type": "publication-article", "scheme": "doi"},
-              {"identifier": "10.12688/f1000research.14613.1", "relation": "references", "resource_type": "publication-article", "scheme": "doi"}
+              {"identifier": "10.12688/f1000research.14613.2", "relation": "references", "resource_type": "publication-article", "scheme": "doi"}
             ]' \
             '{
               metadata: {
