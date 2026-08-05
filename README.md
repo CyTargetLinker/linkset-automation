@@ -2,6 +2,8 @@
 
 [![WikiPathways linkset](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/create-linkset-wikipathways.yml?label=WikiPathways%20linkset)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/create-linkset-wikipathways.yml)
 [![TFLink linkset](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/create-linkset-tflink.yml?label=TFLink%20linkset)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/create-linkset-tflink.yml)
+[![ChEMBL linkset](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/Chembl_MoA.yml?label=ChEMBL%20linkset)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/Chembl_MoA.yml)
+[![Orphanet linkset](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/Create_OrphanetLinkset.yml?label=Orphanet%20linkset)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/Create_OrphanetLinkset.yml)
 [![QC XGMML](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/qc-xgmml.yml?label=QC%20XGMML)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/qc-xgmml.yml)
 [![BridgeDb cache](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/update-bridgedb.yml?label=BridgeDb%20cache)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/update-bridgedb.yml)
 
