@@ -35,11 +35,12 @@ cfa	Canis_familiaris	Canis familiaris	En,L,S	extra	0.80
 gga	Gallus_gallus	Gallus gallus	En,L,S	extra	0.80
 dme	Drosophila_melanogaster	Drosophila melanogaster	En,L,S	extra	0.80
 # Arabidopsis and Anopheles have Ensembl Plants / Metazoa 56 BridgeDb files
-# while the GMTs are Entrez-keyed, so cross-reference yield is low. They are
-# still useful: an unmapped node keeps its Entrez id and still matches an
-# Entrez-keyed network, it is just narrower. Threshold left at 0 deliberately.
-ath	Arabidopsis_thaliana	Arabidopsis thaliana	En,L,S	extra	0.00
-aga	Anopheles_gambiae	Anopheles gambiae	En,L,S	extra	0.00
+# rather than Ensembl 111 like the rest, which was expected to map the
+# Entrez-keyed GMTs poorly. Measured on release 20260710 it does not: both
+# reach 100% cross-reference coverage, so they carry the same floor as the
+# other extra species.
+ath	Arabidopsis_thaliana	Arabidopsis thaliana	En,L,S	extra	0.80
+aga	Anopheles_gambiae	Anopheles gambiae	En,L,S	extra	0.80
 #
 # Available in both WikiPathways and BridgeDb, but not built: too few pathways
 # to be a useful linkset (counts from release 20260710). Re-enable by

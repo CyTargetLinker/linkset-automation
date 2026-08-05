@@ -1,9 +1,54 @@
+name: Create WikiPathways linksets
+
 on:
   workflow_dispatch:
+    inputs:
+      species:
+        description: "Space-separated codes to build (default: all enabled in species.tsv)"
+        required: false
+        type: string
+      version:
+        description: "WikiPathways release to build (default: the current one)"
+        required: false
+        type: string
+      skip_zenodo:
+        description: "Build and QC only, do not touch Zenodo"
+        type: boolean
+        default: false
+      force_publish:
+        description: "Publish even if Zenodo already has this WikiPathways release"
+        type: boolean
+        default: false
+  schedule:
+    # 03:17 UTC on the 15th of January, April, July and October.
+    # WikiPathways publishes on the 10th, so the 15th leaves five days of
+    # margin. The odd minute and off-peak hour are deliberate: GitHub queues
+    # scheduled workflows behind everyone else's on-the-hour crons and may
+    # delay or drop them.
+    #
+    # Note that GitHub disables scheduled workflows in a repository after 60
+    # days without activity, which is shorter than this interval. If a run is
+    # missed, check whether the schedule was disabled in the Actions tab.
+    - cron: "17 3 15 1,4,7,10 *"
+
+concurrency:
+  # Never run two of these at once: the job mutates a Zenodo draft, and a
+  # cancelled run would leave one dangling.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  ZENODO_DEPOSITION_ID: "4500958"
+  # Concept (all-versions) record, used to read what is currently published.
+  ZENODO_CONCEPT_ID: "4500957"
 
 jobs:
-  use-cached-files:
+  build:
     runs-on: ubuntu-latest
+    timeout-minutes: 120
     steps:
 
       - name: Checkout repo
@@ -22,82 +67,149 @@ jobs:
           wget -O linkset-creator-v2.0.jar \
             https://github.com/CyTargetLinker/linksetCreator/releases/download/v2.0/linkset-creator-v2.0.jar
 
-      - name: Download BridgeDb files (latest figshare URLs from bridgedb/data)
-        run: |
-          mkdir -p bridgedb
-          # gene.json in github.com/bridgedb/data holds the latest per-species .bridge URLs.
-          curl -sL "https://raw.githubusercontent.com/bridgedb/data/main/gene.json" -o gene.json
-          ua="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-          for entry in \
-            "Homo sapiens|hsa" \
-            "Mus musculus|mmu" \
-            "Rattus norvegicus|rno"; do
-            org="${entry%|*}"; code="${entry#*|}"
-            url=$(jq -r --arg o "$org" '.mappingFiles[] | select(.species==$o) | .downloadURL' gene.json)
-            # figshare needs the ndownloader host + a browser UA/Referer
-            norm="${url/https:\/\/figshare.com\/ndownloader/https:\/\/ndownloader.figshare.com}"
-            echo "Downloading $code bridge ($org) from $norm"
-            wget --quiet --user-agent="$ua" --header="Referer: https://figshare.com/" \
-              -O "bridgedb/${code}.bridge" "$norm"
-            unzip -t "bridgedb/${code}.bridge" >/dev/null 2>&1 || { echo "BAD ZIP: ${code}.bridge"; exit 1; }
-          done
-          ls -la bridgedb/
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "11"
 
       - name: Setup Python
         uses: actions/setup-python@v5
 
-      - name: Install dependencies with pip
-        run: pip3 install gseapy requests
+      - name: Install dependencies
+        run: pip3 install requests
 
-      - name: Run preprocessing
-        run: python3 wikipathways/wp.py
-
-      - name: Check ls
-        run: ls -la
-
-      - name: Create Linkset XGMML files
+      # Resolves the WikiPathways release, writes input_<code>.txt and a
+      # generated wp_<code>.config per species, and writes build/manifest.tsv
+      # listing the species it actually built. Every later step iterates the
+      # manifest, so a species skipped here cannot leave a step looking for a
+      # file that was never produced.
+      - name: Preprocess WikiPathways GMTs
+        env:
+          WP_SPECIES: ${{ inputs.species }}
+          WP_VERSION: ${{ inputs.version }}
         run: |
-          for code in hsa mmu rno; do
-            echo "=== $code ==="
+          python3 wikipathways/wp.py
+          echo "WP_RELEASE=$(cat build/version.txt)" >> "$GITHUB_ENV"
+          cat build/manifest.tsv
+
+      # One species at a time, deleting each .bridge right after use: the full
+      # set is a few GB, but peak disk stays at the largest single file.
+      - name: Build linksets
+        run: |
+          set -euo pipefail
+          mkdir -p bridgedb
+          curl -sSL --retry 5 --retry-delay 5 \
+            "https://raw.githubusercontent.com/bridgedb/data/main/gene.json" -o gene.json
+
+          # Process substitution, not a pipe: a pipe would run the loop body in
+          # a subshell, where `exit 1` would end only the subshell and leave the
+          # step passing.
+          while IFS=$'\t' read -r code token organism bridgedb_species rest; do
+            echo "::group::$code ($organism)"
+            url=$(jq -r --arg o "$bridgedb_species" \
+                  '.mappingFiles[] | select(.species==$o) | .downloadURL' gene.json)
+            if [ -z "$url" ] || [ "$url" = "null" ]; then
+              echo "ERROR: no BridgeDb mapping file for '$bridgedb_species' in gene.json"
+              exit 1
+            fi
+            scripts/fetch-bridge.sh "$url" "bridgedb/${code}.bridge"
+
             java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
               -c "wikipathways/wp_${code}.config" \
               -i "input_${code}.txt" \
               -o "wikipathways_${code}.xgmml"
-          done
+
+            rm -f "bridgedb/${code}.bridge"
+            df -h --output=avail / | tail -1
+            echo "::endgroup::"
+          done < <(tail -n +2 build/manifest.tsv)
           ls -la wikipathways_*.xgmml
 
+      # Any failure here fails the whole run and nothing is published: a
+      # partial publish would mint a permanent DOI on an incomplete record,
+      # whereas a failed run just needs re-dispatching.
       - name: QC validate linksets
-        run: python3 scripts/qc_xgmml.py --min-nodes 1 --min-edges 1 wikipathways_hsa.xgmml wikipathways_mmu.xgmml wikipathways_rno.xgmml
+        run: |
+          set -euo pipefail
+          while IFS=$'\t' read -r code token organism bridgedb_species syscodes frac rest; do
+            echo "::group::QC $code"
+            python3 scripts/qc_xgmml.py \
+              --min-nodes 1 --min-edges 1 \
+              --mapped-type gene --min-mapped-frac "$frac" \
+              "wikipathways_${code}.xgmml"
+            echo "::endgroup::"
+          done < <(tail -n +2 build/manifest.tsv)
 
-      - name: Check ls
-        run: ls -la
+          built=$(ls -1 wikipathways_*.xgmml | wc -l)
+          expected=$(( $(wc -l < build/manifest.tsv) - 1 ))
+          if [ "$built" -ne "$expected" ]; then
+            echo "ERROR: built $built linkset(s) but the manifest lists $expected"
+            exit 1
+          fi
+          echo "$built linkset(s) built and validated"
 
       - name: Upload linkset artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: wikipathways-linksets
-          path: wikipathways_*.xgmml
+          name: wikipathways-linksets-${{ env.WP_RELEASE }}
+          path: |
+            wikipathways_*.xgmml
+            build/manifest.tsv
 
-      - name: Install curl and jq
-        run: sudo apt-get install -y curl jq
-
-      - name: Discard Current Draft
+      - name: Decide whether to publish
+        id: gate
         run: |
-          deposition_id=4500958
+          set -euo pipefail
+          wp_version="$(cat build/version.txt)"
+
+          if [ "${{ inputs.skip_zenodo }}" = "true" ]; then
+            echo "skip_zenodo requested; not publishing"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          zen=$(curl -sSL --retry 3 "https://zenodo.org/api/records/${ZENODO_CONCEPT_ID}")
+          zen_version=$(echo "$zen" | jq -r '.metadata.version // ""')
+          echo "WikiPathways release: $wp_version | Zenodo latest: $zen_version"
+
+          if [ "$zen_version" = "$wp_version" ] && [ "${{ inputs.force_publish }}" != "true" ]; then
+            echo "Zenodo already publishes WikiPathways $wp_version; nothing new to release."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Zenodo versions are immutable, so never publish a record that has
+          # lost a species relative to the last one (e.g. after a transient
+          # WikiPathways 404 skipped an 'extra' species).
+          missing=$(comm -23 \
+            <(echo "$zen" | jq -r '.files[].key' | sort) \
+            <(ls -1 wikipathways_*.xgmml | sort) || true)
+          if [ -n "$missing" ]; then
+            echo "ERROR: these previously published files are absent from this build:"
+            echo "$missing"
+            echo "Refusing to publish a shrinking record. Re-run with force_publish if intended."
+            exit 1
+          fi
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Discard current Zenodo draft
+        if: steps.gate.outputs.publish == 'true'
+        run: |
           discard_response=$(curl -s -X POST \
             -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
-            "https://zenodo.org/api/deposit/depositions/$deposition_id/actions/discard")
+            "https://zenodo.org/api/deposit/depositions/${ZENODO_DEPOSITION_ID}/actions/discard")
           echo "Discard Response: $discard_response"
           # Non-fatal: no existing draft is fine, so we do not exit on failure here
 
-      - name: Create a New Version of the Deposition
+      - name: Create a new version of the deposition
         id: new_version
+        if: steps.gate.outputs.publish == 'true'
         run: |
-          deposition_id=4500958
           response=$(curl -s -X POST \
             -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
-            "https://zenodo.org/api/deposit/depositions/$deposition_id/actions/newversion")
-          echo "Response: $response"
+            "https://zenodo.org/api/deposit/depositions/${ZENODO_DEPOSITION_ID}/actions/newversion")
 
           new_draft_url=$(echo "$response" | jq -r '.links.latest_draft')
           if [[ "$new_draft_url" == "null" || -z "$new_draft_url" ]]; then
@@ -108,7 +220,6 @@ jobs:
           new_draft_response=$(curl -s \
             -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
             "$new_draft_url")
-          echo "New Draft Response: $new_draft_response"
 
           new_deposition_id=$(echo "$new_draft_response" | jq -r '.id')
           new_bucket_url=$(echo "$new_draft_response" | jq -r '.links.bucket')
@@ -119,19 +230,18 @@ jobs:
           fi
 
           echo "New Deposition ID: $new_deposition_id"
-          echo "New Bucket URL: $new_bucket_url"
           echo "new_deposition_id=$new_deposition_id" >> $GITHUB_ENV
           echo "new_bucket_url=$new_bucket_url" >> $GITHUB_ENV
 
       - name: Clear inherited files from the new draft
+        if: steps.gate.outputs.publish == 'true'
         run: |
           # A new Zenodo version is created as a copy of the previous version,
           # including its files. Remove those inherited files so this version
-          # contains only the freshly built linkset (not stale older ones).
+          # contains only the freshly built linksets (not stale older ones).
           files=$(curl -s \
             -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
             "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/files")
-          echo "Inherited files: $files"
           echo "$files" | jq -r '.[].id' | while read -r file_id; do
             [ -z "$file_id" ] && continue
             echo "Deleting inherited file $file_id"
@@ -141,25 +251,33 @@ jobs:
           done
 
       - name: Upload linksets to Zenodo
+        if: steps.gate.outputs.publish == 'true'
         run: |
-          for f in wikipathways_hsa.xgmml wikipathways_mmu.xgmml wikipathways_rno.xgmml; do
+          set -euo pipefail
+          for f in wikipathways_*.xgmml; do
             echo "Uploading $f..."
-            curl --progress-bar \
+            curl --fail --progress-bar \
               -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
               --upload-file "$f" \
               "${{ env.new_bucket_url }}/$f"
           done
 
-      - name: Update Metadata for New Version
+      - name: Update metadata for the new version
+        if: steps.gate.outputs.publish == 'true'
         run: |
-          version=20260510
+          set -euo pipefail
+          version="$(cat build/version.txt)"
           current_date=$(date +%Y-%m-%d)
+          n_species=$(( $(wc -l < build/manifest.tsv) - 1 ))
+          species_list=$(tail -n +2 build/manifest.tsv | cut -f3 | paste -sd'; ' -)
+          description="<p>This dataset contains linkset networks of pathway-gene interactions from WikiPathways release ${version}, in XGMML format, for ${n_species} species: ${species_list}.</p>"
+
           metadata=$(jq -n \
             --arg title "WikiPathways Linksets" \
             --arg version "$version" \
             --arg date "$current_date" \
             --argjson communities '[{"identifier": "cytargetlinker"}]' \
-            --arg description "<p>This dataset contains linkset networks of pathway-gene interactions for all human, mouse, and rat WikiPathways pathways in XGMML format.</p>" \
+            --arg description "$description" \
             --argjson creators '[
               {"name": "Kutmon, Martina", "affiliation": "Maastricht University", "orcid": "0000-0002-7699-8191"},
               {"name": "Martens, Marvin", "affiliation": "Maastricht University", "orcid": "0000-0003-2230-0840"},
@@ -193,16 +311,16 @@ jobs:
             --data "$metadata" \
             "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}"
 
-      - name: Publish Updated Zenodo Record
+      - name: Publish updated Zenodo record
+        if: steps.gate.outputs.publish == 'true'
         run: |
           publish_response=$(curl -s \
             -H "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
             -H "Content-Type: application/json" \
             -X POST \
             "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/actions/publish")
-          echo "Publish Response: $publish_response"
           if echo "$publish_response" | jq -e '.status == "error"' > /dev/null 2>&1; then
-            echo "Publishing failed!"
+            echo "Publishing failed! Response: $publish_response"
             exit 1
           fi
           echo "Published successfully. DOI: $(echo "$publish_response" | jq -r '.doi')"
