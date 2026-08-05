@@ -1,46 +1,74 @@
-# Reactome pathway-gene linkset
+# Reactome linkset
 
-`reactome.py` builds one linkset input per species listed in `species.tsv`, plus
-`build/version.txt` and `build/manifest.tsv`. Per-species configs are generated
-into `reactome/config/` from `reactome.config.template` and are gitignored.
+Pathway–gene linkset for human, built from Reactome's `NCBI2Reactome.txt`.
+
+| | |
+| --- | --- |
+| Source | https://reactome.org (`NCBI2Reactome.txt`); gene symbols from NCBI Gene `gene_info` (public domain) |
+| License | CC0 1.0 — Reactome dedicates its data to the public domain |
+| DOI | not yet deposited — needs the one-time setup below |
+| Workflow | `.github/workflows/create-linkset-reactome.yml` |
+| Species | hsa |
+
+## How it works
+
+`reactome.py` resolves the release, downloads the pathway–gene table, and writes
+`input_<code>.txt` plus a generated `config/reactome_<code>.config` for each
+species. Genes enter as Entrez (`target_syscode_in=L`), are labelled with their
+NCBI gene symbol, and BridgeDb expands them to Ensembl, Entrez and UniProt, plus
+HGNC for human.
 
 ```bash
-python3 reactome/reactome.py --species hsa
-python3 reactome/reactome.py --version 97     # a specific release
+python3 reactome/reactome.py                    # all enabled species, current release
+python3 reactome/reactome.py --species hsa      # just this one
+python3 reactome/reactome.py --version 97       # a specific release
 ```
 
-Human only for now. Release 097 gives 2310 pathways, 11337 genes and 48811
-edges, with 99.8% of gene nodes mapped.
+Release 097 human: 2310 pathways, 11337 genes, 48811 edges, 99.8% mapped.
 
-## Gotchas
+## Input
 
-**The input is `NCBI2Reactome.txt`, not `ReactomePathways.gmt`.** The GMT looks
-like the WikiPathways analogue and is not: it is human-only, the bytes served at
-the `.gmt` URL are a ZIP archive, and the plain `.gmt` path 403s in the versioned
-archive, so it cannot support a pinned build. `NCBI2Reactome.txt` carries Entrez
-ids for every species and lands on the existing syscode `L`.
+`NCBI2Reactome.txt` rather than `ReactomePathways.gmt`. The GMT covers human
+only, is served as a ZIP archive under a `.gmt` name, and is not available in the
+versioned archive, so it cannot support a pinned build. The table carries Entrez
+ids for every species and is a plain TSV in both current and archived releases.
 
-**A (gene, pathway) pair can appear twice**, once `TAS` and once `IEA` — 4066 of
-them in human, an 8% edge inflation if written straight out. The pair is emitted
-once with the codes aggregated (`TAS`, `IEA`, `TAS+IEA`), so the evidence column
-is not a copy of the source column.
+Reactome lists a gene twice for a pathway when it is supported both by curation
+and by orthology projection, so pairs are de-duplicated and their `TAS`/`IEA`
+codes aggregated into one `evidence` column.
 
-**Genes NCBI has not named are rejected, not kept.** WikiPathways falls back to
-the Entrez id as a label; here the id is dropped, because the ones `gene_info`
-lacks are pathogen-side genes Reactome files under the host species in its
-infectious-disease pathways (*Escherichia ruysiae* `skp`, `secY`, `secE`) plus 22
-GenBank/RefSeq accessions that are not genes. None map in BridgeDb. The cost is
-real and counted: on release 097 this drops 3.4% of human genes and empties 30
-pathways, so `max_reject_frac` in `species.tsv` gates it.
+Genes NCBI has not named are dropped rather than kept under a bare identifier.
+These are pathogen-side genes that Reactome files under the host species in its
+infectious-disease pathways, and none of them map in BridgeDb. The share dropped
+is gated by `max_reject_frac` in `species.tsv` (human is 3.4%).
 
-**Versions are zero-padded to three digits.** The Zenodo gate compares version
-strings with the shell's `\<`, under which `100` sorts before `97`.
+## Species
 
-**"Lowest level" means lowest-level diagram, not leaf.** 325 of the 2343 human
-pathways still have children, so about 9% of pairs attribute a gene to both a
-pathway and an ancestor of it. The all-levels file is 3x larger and gives
-*Signal Transduction* 2622 genes, which is useless as a neighbour set.
+Human only. The other eleven buildable species are listed and commented out in
+`species.tsv`, because Reactome projects most non-human content from human by
+orthology — all 1467 mouse pathways share their name and numeric stem with a
+human pathway. Fly, chicken and yeast carry some natively curated pathways, so
+they are worth judging separately rather than as one group.
 
-**Non-human species are mostly orthology projections** and are all `off` in
-`species.tsv` pending a decision — see the comments there, which record which
-species are genuinely curated.
+Three further species have no BridgeDb bundle, and *M. tuberculosis* has no NCBI
+per-species `gene_info`, the same blocker recorded for horse, tomato and poplar
+in `wikipathways/species.tsv`.
+
+## Versioning
+
+The release is read from Reactome's ContentService at run time and zero-padded to
+three digits (`097`), so nothing needs editing when Reactome releases. The
+padding keeps the Zenodo version gate's string comparison correct past release
+100. Reactome releases quarterly.
+
+## Release
+
+Not yet deposited. Dispatch the workflow once with `bootstrap_zenodo` to create
+the first draft: it builds, QCs, uploads and sets the metadata, then stops
+without publishing, because minting a DOI cannot be undone. Review it at
+https://zenodo.org/me/uploads while logged in as the account that owns
+`ZENODO_ACCESS_TOKEN`, publish by hand, then set `ZENODO_DEPOSITION_ID` and
+`ZENODO_CONCEPT_ID` in the workflow and add a quarterly schedule.
+
+Metadata lives in `zenodo-metadata.sh` so the bootstrap and later versions cannot
+drift apart.

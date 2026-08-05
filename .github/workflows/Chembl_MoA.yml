@@ -129,7 +129,7 @@ jobs:
           java \
             -Dfile.encoding=UTF-8 \
             -jar linkset-creator-v2.0.jar \
-            -c "CHEMBL/chembl_human_MoA.config" \
+            -c "CHEMBL/config/chembl_human_MoA.config" \
             -i "input.txt" \
             -o "ChEMBL_MechanismOfAction.xgmml"
 
@@ -155,11 +155,10 @@ jobs:
         run: |
           set -euo pipefail
 
-          version=$(sed -n 's/^version[[:space:]]*=[[:space:]]*//p' \
-            CHEMBL/chembl_human_MoA.config | head -n 1)
+          version=$(cat build/version.txt)
 
           if [ -z "$version" ]; then
-            echo "Could not find version in CHEMBL/chembl_human_MoA.config"
+            echo "build/version.txt is empty; CHEMBL_MoA.py did not resolve a release"
             exit 1
           fi
 
