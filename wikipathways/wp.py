@@ -6,6 +6,10 @@ For every species listed in wikipathways/species.tsv this writes:
     input_<code>.txt                        tab-delimited pathway-gene pairs
     wikipathways/config/wp_<code>.config    generated from wp.config.template
 
+Gene nodes are labelled with their NCBI gene symbol, looked up per species in
+NCBI gene_info; the GMT itself carries only Entrez ids. A gene NCBI has not
+named keeps its Entrez id as the label.
+
 plus two files describing the build:
 
     build/version.txt                the WikiPathways release that was used
@@ -42,9 +46,12 @@ inputs:
 
 import argparse
 import csv
+import gzip
+import os
 import pathlib
 import re
 import sys
+import time
 
 import requests
 
@@ -70,9 +77,43 @@ MAX_RELEASE_CANDIDATES = 3
 # skipped; a 'core' species below it means something is wrong upstream.
 MIN_PATHWAYS = 5
 
+# NCBI per-species gene_info gives GeneID -> Symbol. The GMT carries no symbol,
+# so without this every gene node is labelled with a bare Entrez number. The
+# filename is the WikiPathways token for all 13 species -- including
+# Canis_familiaris, which NCBI does NOT file under Canis_lupus_familiaris -- so
+# only the clade directory differs, and it is not derivable from the token.
+NCBI_GENE_INFO_URL = "https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO"
+
+# Validated when species.tsv is read, so a typo fails before any download.
+NCBI_CLADES = frozenset({
+    "Archaea_Bacteria", "Fungi", "Invertebrates", "Mammalia",
+    "Non-mammalian_vertebrates", "Plants", "Protozoa", "Viruses",
+})
+
+# What NCBI writes for a gene it has not named. LOC<GeneID> is handled
+# separately because it embeds the gene's own id.
+PLACEHOLDER_SYMBOLS = frozenset({"-", "NEWENTRY"})
+
+# A symbol carrying any of these would corrupt the input file: csv.writer would
+# quote the field, but linkset-creator splits rows with Java String.split("\t")
+# rather than a CSV parser, so an embedded tab shifts every later column.
+UNSAFE_IN_SYMBOL = frozenset("\t\r\n\"")
+
+# Fail a species below this fraction of its genes carrying a symbol. Measured on
+# release 20260710: 100% for mmu/sce/cel/dme/ath, 98.9-99.9% elsewhere, and
+# 81.2% for aga (NCBI has named only a third of Anopheles genes). Well below the
+# worst real value, but far above the 0% of a gene_info file that downloaded but
+# was empty, truncated, or for the wrong organism.
+MIN_SYMBOL_FRAC = 0.5
+
+DOWNLOAD_ATTEMPTS = 3
+
 MANIFEST_COLUMNS = [
     "code", "wp_token", "organism", "bridgedb_species",
     "syscodes_out", "min_mapped_frac", "n_pathways", "n_rows",
+    # Append here, never insert: the workflow reads this file positionally
+    # (`cut -f3`, and `read -r code token organism bridgedb_species rest`).
+    "n_genes", "symbol_frac",
 ]
 
 INPUT_COLUMNS = [
@@ -166,14 +207,19 @@ def load_species(selected=None, path=SPECIES_TSV):
             if not line.strip() or line.lstrip().startswith("#"):
                 continue
             fields = line.rstrip("\n").split("\t")
-            if len(fields) < 6:
-                sys.exit(f"ERROR: {path}: expected 6 columns, got {len(fields)}: {line!r}")
-            code, token, bridgedb_species, syscodes_out, tier, min_frac = fields[:6]
+            if len(fields) < 7:
+                sys.exit(f"ERROR: {path}: expected 7 columns, got {len(fields)}: {line!r}")
+            (code, token, clade, bridgedb_species,
+             syscodes_out, tier, min_frac) = fields[:7]
             if tier == "off" or (only and code not in only):
                 continue
+            if clade not in NCBI_CLADES:
+                sys.exit(f"ERROR: {path}: {code} has unknown ncbi_clade {clade!r}; "
+                         f"expected one of {', '.join(sorted(NCBI_CLADES))}")
             rows.append({
                 "code": code,
                 "wp_token": token,
+                "ncbi_clade": clade,
                 "organism": token.replace("_", " "),
                 "bridgedb_species": bridgedb_species,
                 "syscodes_out": syscodes_out,
@@ -189,6 +235,106 @@ def load_species(selected=None, path=SPECIES_TSV):
         sys.exit(f"ERROR: --species names species not enabled in {path}: "
                  f"{' '.join(sorted(unknown))}")
     return rows
+
+
+def download(url, local, attempts=DOWNLOAD_ATTEMPTS):
+    """Stream url to local, reusing an existing non-empty copy.
+
+    Written to a sibling temp file and renamed only once the transfer finished,
+    so an interrupted run cannot leave a truncated file that the next run
+    happily reuses. The temp name keeps the .gz suffix so .gitignore covers it.
+    """
+    if os.path.exists(local) and os.path.getsize(local) > 0:
+        print(f"  using existing {local} (delete it to refresh)")
+        return local
+
+    tmp = f"{local[:-3]}.partial.gz" if local.endswith(".gz") else f"{local}.partial"
+    delay = 2
+    try:
+        for attempt in range(1, attempts + 1):
+            try:
+                with requests.get(url, stream=True, timeout=600) as response:
+                    if response.status_code == 404:
+                        # Not transient, so do not spend retries on it: either
+                        # the ncbi_clade is wrong, or NCBI publishes no
+                        # per-species file for this organism (it does so for a
+                        # shortlist only -- horse, tomato and poplar have none).
+                        sys.exit(f"ERROR: {url} does not exist (404). Check the "
+                                 f"ncbi_clade column against the listing at "
+                                 f"{NCBI_GENE_INFO_URL}/")
+                    response.raise_for_status()
+                    with open(tmp, "wb") as handle:
+                        for chunk in response.iter_content(chunk_size=1 << 20):
+                            handle.write(chunk)
+                os.replace(tmp, local)
+                return local
+            except requests.RequestException as error:
+                print(f"  attempt {attempt}/{attempts} failed: {error}")
+                if attempt == attempts:
+                    sys.exit(f"ERROR: could not download {url}")
+                time.sleep(delay)
+                delay *= 2
+    finally:
+        if os.path.exists(tmp):
+            os.remove(tmp)
+
+
+def usable_symbol(gene_id, symbol):
+    """True if gene_info's Symbol is a name rather than an NCBI placeholder.
+
+    NCBI never leaves Symbol empty: an unnamed gene is given LOC<GeneID>. The
+    test is equality with this row's own GeneID rather than a "LOC" prefix, so a
+    real gene whose name merely starts with LOC is never discarded.
+
+    Systematic-looking names that are NOT placeholders are deliberately kept:
+    Arabidopsis AGI codes (AT2G01050) and yeast systematic names (YCL068C) are
+    the identifiers those communities actually use.
+    """
+    if not symbol or symbol in PLACEHOLDER_SYMBOLS:
+        return False
+    if symbol == f"LOC{gene_id}":
+        return False
+    return not (UNSAFE_IN_SYMBOL & set(symbol))
+
+
+def load_symbols(species):
+    """Return {GeneID: Symbol} from this species' NCBI gene_info file.
+
+    Deliberately does NOT filter on tax_id. A per-species file also carries
+    strain and subspecies rows: the yeast file holds 6478 rows of 559292 against
+    36 of 4932, and the mouse file spans five taxa, so filtering on the nominal
+    id would discard nearly everything. Entrez GeneIDs are globally unique, so a
+    row for another taxon can never be matched by the wrong species.
+
+    gene_info columns: 0 tax_id  1 GeneID  2 Symbol  3 LocusTag  4 Synonyms ...
+    """
+    url = f"{NCBI_GENE_INFO_URL}/{species['ncbi_clade']}/{species['wp_token']}.gene_info.gz"
+    local = f"gene_info_{species['code']}.gz"
+    print(f"  symbols: {url}")
+    download(url, local)
+
+    symbols = {}
+    try:
+        with gzip.open(local, "rt", encoding="utf-8") as handle:
+            for row in csv.reader(handle, delimiter="\t"):
+                if not row or row[0].startswith("#") or len(row) < 3:
+                    continue
+                gene_id, symbol = row[1], row[2]
+                if usable_symbol(gene_id, symbol):
+                    symbols[gene_id] = symbol
+    except (OSError, EOFError, UnicodeDecodeError) as error:
+        # gzip.BadGzipFile is an OSError; a truncated file raises EOFError.
+        sys.exit(f"ERROR: cannot read {local}: {error} (delete it and re-run)")
+
+    if not symbols:
+        sys.exit(f"ERROR: {local} contains no usable gene symbols")
+    return symbols
+
+
+def symbol_coverage(pathways, symbols):
+    """Return (distinct genes, how many of them have a symbol)."""
+    genes = {gene for pathway in pathways for gene in pathway[4]}
+    return len(genes), sum(1 for gene in genes if gene in symbols)
 
 
 def parse_gmt(text):
@@ -233,7 +379,7 @@ def parse_gmt(text):
     return pathways
 
 
-def write_input(code, pathways):
+def write_input(code, pathways, symbols):
     """Write input_<code>.txt. Returns the number of pathway-gene rows."""
     out = f"input_{code}.txt"
     rows = 0
@@ -242,8 +388,10 @@ def write_input(code, pathways):
         writer.writerow(INPUT_COLUMNS)
         for name, pathway_id, version, species, genes in pathways:
             for gene in genes:
-                # The gene id doubles as the label: the GMT carries no symbol.
-                writer.writerow([name, pathway_id, len(genes), gene, gene, version, species])
+                # The GMT has no symbol; it comes from NCBI gene_info, and a
+                # gene NCBI has not named keeps its Entrez id as the label.
+                writer.writerow([name, pathway_id, len(genes), gene,
+                                 symbols.get(gene, gene), version, species])
                 rows += 1
     return rows
 
@@ -320,12 +468,23 @@ def main(argv=None):
             print(f"SKIP {message}")
             continue
 
-        n_rows = write_input(code, pathways)
+        symbols = load_symbols(species)
+        n_genes, n_symbols = symbol_coverage(pathways, symbols)
+        frac = n_symbols / n_genes
+        print(f"  {len(symbols)} symbols in gene_info; "
+              f"{n_symbols}/{n_genes} ({frac:.1%}) of this species' genes named")
+        if frac < MIN_SYMBOL_FRAC:
+            sys.exit(f"ERROR: {label}: only {n_symbols}/{n_genes} ({frac:.1%}) of genes "
+                     f"have a symbol, below the minimum of {MIN_SYMBOL_FRAC:.0%}")
+
+        n_rows = write_input(code, pathways, symbols)
         config = write_config(species, version, template)
         print(f"  {len(pathways)} pathways, {n_rows} pairs -> input_{code}.txt, {config}")
 
         species["n_pathways"] = len(pathways)
         species["n_rows"] = n_rows
+        species["n_genes"] = n_genes
+        species["symbol_frac"] = f"{frac:.4f}"
         built.append(species)
 
     if not built:
