@@ -310,7 +310,7 @@ jobs:
             ]' \
             --argjson related_identifiers '[
               {"identifier": "10.1093/nar/gkad960", "relation": "references", "resource_type": "publication-article", "scheme": "doi"},
-              {"identifier": "10.12688/f1000research.14613.1", "relation": "references", "resource_type": "publication-article", "scheme": "doi"}
+              {"identifier": "10.12688/f1000research.14613.2", "relation": "references", "resource_type": "publication-article", "scheme": "doi"}
             ]' \
             '{
               metadata: {
@@ -324,7 +324,7 @@ jobs:
                 license: "cc-by-4.0",
                 creators: $creators,
                 related_identifiers: $related_identifiers,
-                references: ["Kutmon et al (2018) https://doi.org/10.12688/f1000research.14613.1"],
+                references: ["Kutmon et al (2019) https://doi.org/10.12688/f1000research.14613.2"],
                 communities: $communities
                 }
             }')
