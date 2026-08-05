@@ -25,10 +25,9 @@ permissions:
   contents: read
 
 env:
-  # Create and publish the first Orphanet Zenodo deposition manually.
-  # Then add the deposition ID and concept ID here.
-  ZENODO_DEPOSITION_ID: ""
-  ZENODO_CONCEPT_ID: ""
+  ZENODO_DEPOSITION_ID: "21805965"
+  # Concept (all-versions) record, used to read what is currently published.
+  ZENODO_CONCEPT_ID: "21805964"
 
 jobs:
   create-linkset:
