@@ -1,0 +1,409 @@
+name: Create Orphanet linkset
+
+on:
+  workflow_dispatch:
+    inputs:
+      skip_zenodo:
+        description: "Build and QC only, do not touch Zenodo"
+        type: boolean
+        default: false
+      force_publish:
+        description: "Publish even if Zenodo already has this Orphanet version"
+        type: boolean
+        default: false
+
+concurrency:
+  # Never run two workflows at once because the job modifies a Zenodo draft.
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # Create and publish the first Orphanet Zenodo deposition manually.
+  # Then add the deposition ID and concept ID here.
+  ZENODO_DEPOSITION_ID: ""
+  ZENODO_CONCEPT_ID: ""
+
+jobs:
+  create-linkset:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "11"
+
+      - name: Restore linkset-creator jar from cache
+        uses: actions/cache@v4
+        id: cache-jar
+        with:
+          path: ./linkset-creator-v2.0.jar
+          key: cached-linkset-creator-v2.0-jar
+
+      - name: Download linkset-creator jar if cache missed
+        if: steps.cache-jar.outputs.cache-hit != 'true'
+        run: |
+          wget -O linkset-creator-v2.0.jar \
+            https://github.com/CyTargetLinker/linksetCreator/releases/download/v2.0/linkset-creator-v2.0.jar
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Python dependencies
+        run: pip3 install requests
+
+      - name: Run Orphanet preprocessing
+        run: python3 Orphanet/Orphanet.py
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Download Homo sapiens BridgeDb file
+        run: |
+          set -euo pipefail
+
+          mkdir -p bridgedb
+
+          curl -sL \
+            "https://raw.githubusercontent.com/bridgedb/data/main/gene.json" \
+            -o gene.json
+
+          organism="Homo sapiens"
+
+          url=$(jq -r \
+            --arg organism "$organism" \
+            '.mappingFiles[]
+             | select(.species == $organism)
+             | .downloadURL' \
+            gene.json)
+
+          if [ -z "$url" ] || [ "$url" = "null" ]; then
+            echo "Could not find a BridgeDb mapping file for $organism"
+            exit 1
+          fi
+
+          normalized_url="${url/https:\/\/figshare.com\/ndownloader/https:\/\/ndownloader.figshare.com}"
+
+          user_agent="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36"
+
+          echo "Downloading Homo sapiens BridgeDb file from $normalized_url"
+
+          wget \
+            --quiet \
+            --user-agent="$user_agent" \
+            --header="Referer: https://figshare.com/" \
+            -O "bridgedb/hsa.bridge" \
+            "$normalized_url"
+
+          unzip -t bridgedb/hsa.bridge >/dev/null 2>&1 || {
+            echo "Invalid BridgeDb file: bridgedb/hsa.bridge"
+            exit 1
+          }
+
+          ls -la bridgedb/
+
+      - name: Create Orphanet linkset
+        run: |
+          set -euo pipefail
+
+          java \
+            -Dfile.encoding=UTF-8 \
+            -jar linkset-creator-v2.0.jar \
+            -c "Orphanet/Orphanet.config" \
+            -i "input.txt" \
+            -o "Orphanet.xgmml"
+
+      - name: Run linkset quality control
+        run: |
+          python3 scripts/qc_xgmml.py \
+            --min-nodes 1 \
+            --min-edges 1 \
+            --mapped-type gene \
+            --min-mapped-frac 0.9 \
+            "Orphanet.xgmml"
+
+      - name: Upload linkset artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Orphanet-linkset
+          path: Orphanet.xgmml
+
+      - name: Determine Orphadata version and publication status
+        id: gate
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          release_date=$(python3 - <<'PY'
+          import xml.etree.ElementTree as ET
+
+          root = ET.parse("product6.xml").getroot()
+          release_date = (
+              root.attrib.get("date")
+              or root.attrib.get("Date")
+              or root.attrib.get("version")
+              or root.attrib.get("Version")
+          )
+
+          if not release_date:
+              raise SystemExit(
+                  "Could not determine the Orphadata release date or version "
+                  "from product6.xml"
+              )
+
+          print(release_date)
+          PY
+          )
+
+          version="Orphadata_${release_date}"
+
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "Built Orphanet linkset from $version"
+
+          if [ "${{ inputs.skip_zenodo }}" = "true" ]; then
+            echo "skip_zenodo requested; not publishing"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if [ -z "${ZENODO_DEPOSITION_ID}" ] || [ -z "${ZENODO_CONCEPT_ID}" ]; then
+            echo "::warning::Orphanet has no configured Zenodo record."
+
+            {
+              echo "### Orphanet linkset not published"
+              echo
+              echo "\`ZENODO_DEPOSITION_ID\` or \`ZENODO_CONCEPT_ID\` is unset."
+              echo
+              echo "Create and publish the initial deposition manually, then add both IDs to this workflow."
+              echo
+              echo "The linkset was successfully built and is available as a workflow artifact."
+            } >> "$GITHUB_STEP_SUMMARY"
+
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          zenodo_record=$(curl \
+            --silent \
+            --show-error \
+            --location \
+            --retry 3 \
+            "https://zenodo.org/api/records/${ZENODO_CONCEPT_ID}")
+
+          zenodo_version=$(echo "$zenodo_record" | jq -r '.metadata.version // ""')
+
+          echo "Latest Zenodo version: ${zenodo_version:-<none>}"
+
+          if [ "$zenodo_version" = "$version" ] && \
+             [ "${{ inputs.force_publish }}" != "true" ]; then
+            echo "Zenodo already contains Orphanet $version."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Discard current Zenodo draft
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          discard_response=$(curl \
+            --silent \
+            --request POST \
+            --header "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "https://zenodo.org/api/deposit/depositions/${ZENODO_DEPOSITION_ID}/actions/discard")
+
+          echo "Discard response: $discard_response"
+
+          # Failure is non-fatal because there may be no existing draft.
+
+      - name: Create new Zenodo version
+        id: new-version
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+
+          response=$(curl \
+            --silent \
+            --show-error \
+            --request POST \
+            --header "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "https://zenodo.org/api/deposit/depositions/${ZENODO_DEPOSITION_ID}/actions/newversion")
+
+          new_draft_url=$(echo "$response" | jq -r '.links.latest_draft')
+
+          if [ "$new_draft_url" = "null" ] || [ -z "$new_draft_url" ]; then
+            echo "Could not retrieve the latest draft URL."
+            echo "Response: $response"
+            exit 1
+          fi
+
+          new_draft_response=$(curl \
+            --silent \
+            --show-error \
+            --header "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "$new_draft_url")
+
+          new_deposition_id=$(echo "$new_draft_response" | jq -r '.id')
+          new_bucket_url=$(echo "$new_draft_response" | jq -r '.links.bucket')
+
+          if [ "$new_deposition_id" = "null" ] || [ -z "$new_deposition_id" ]; then
+            echo "Could not retrieve the new deposition ID."
+            echo "Response: $new_draft_response"
+            exit 1
+          fi
+
+          if [ "$new_bucket_url" = "null" ] || [ -z "$new_bucket_url" ]; then
+            echo "Could not retrieve the new bucket URL."
+            exit 1
+          fi
+
+          echo "New deposition ID: $new_deposition_id"
+
+          echo "new_deposition_id=$new_deposition_id" >> "$GITHUB_ENV"
+          echo "new_bucket_url=$new_bucket_url" >> "$GITHUB_ENV"
+
+      - name: Clear inherited files from new Zenodo draft
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+
+          files=$(curl \
+            --silent \
+            --show-error \
+            --header "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/files")
+
+          echo "$files" | jq -r '.[].id' | while read -r file_id; do
+            [ -z "$file_id" ] && continue
+
+            echo "Deleting inherited file $file_id"
+
+            curl \
+              --silent \
+              --show-error \
+              --request DELETE \
+              --header "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+              "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/files/$file_id"
+          done
+
+      - name: Upload Orphanet linkset to Zenodo
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+
+          echo "Uploading Orphanet.xgmml"
+
+          curl \
+            --fail \
+            --progress-bar \
+            --header "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            --upload-file "Orphanet.xgmml" \
+            "${{ env.new_bucket_url }}/Orphanet.xgmml"
+
+      - name: Update Zenodo metadata
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+
+          version="${{ steps.gate.outputs.version }}"
+          current_date=$(date +%Y-%m-%d)
+
+          description="<p>This dataset contains a linkset network of rare disease–gene associations derived from Orphadata ${version}, in XGMML format.</p><p>The dataset contains human rare diseases and their associated genes and is intended for use with CyTargetLinker.</p>"
+
+          metadata=$(jq -n \
+            --arg title "Orphanet Rare Disease–Gene Linkset" \
+            --arg version "$version" \
+            --arg date "$current_date" \
+            --arg description "$description" \
+            --argjson communities '[{"identifier": "cytargetlinker"}]' \
+            --argjson creators '[
+              {
+                "name": "Kutmon, Martina",
+                "affiliation": "Maastricht University",
+                "orcid": "0000-0002-7699-8191"
+              },
+              {
+                "name": "Martens, Marvin",
+                "affiliation": "Maastricht University",
+                "orcid": "0000-0003-2230-0840"
+              },
+              {
+                "name": "Ehrhart, Friederike",
+                "affiliation": "Maastricht University",
+                "orcid": "0000-0002-7770-620X"
+              }
+            ]' \
+            --argjson related_identifiers '[
+              {
+                "identifier": "https://www.orphadata.com/",
+                "relation": "isDerivedFrom",
+                "resource_type": "dataset",
+                "scheme": "url"
+              }
+            ]' \
+            '{
+              metadata: {
+                title: $title,
+                version: $version,
+                publication_date: $date,
+                description: $description,
+                access_right: "open",
+                upload_type: "dataset",
+                language: "eng",
+                license: "cc-by-4.0",
+                creators: $creators,
+                related_identifiers: $related_identifiers,
+                references: [
+                  "Orphadata: Free access data from Orphanet. https://www.orphadata.com/"
+                ],
+                communities: $communities
+              }
+            }')
+
+          response=$(curl \
+            --silent \
+            --show-error \
+            --header "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            --header "Content-Type: application/json" \
+            --request PUT \
+            --data "$metadata" \
+            "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}")
+
+          if echo "$response" | jq -e '.status == "error"' >/dev/null 2>&1; then
+            echo "Updating metadata failed."
+            echo "Response: $response"
+            exit 1
+          fi
+
+      - name: Publish updated Zenodo record
+        if: steps.gate.outputs.publish == 'true'
+        run: |
+          set -euo pipefail
+
+          publish_response=$(curl \
+            --silent \
+            --show-error \
+            --header "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            --header "Content-Type: application/json" \
+            --request POST \
+            "https://zenodo.org/api/deposit/depositions/${{ env.new_deposition_id }}/actions/publish")
+
+          if echo "$publish_response" | jq -e '.status == "error"' >/dev/null 2>&1; then
+            echo "Publishing failed."
+            echo "Response: $publish_response"
+            exit 1
+          fi
+
+          doi=$(echo "$publish_response" | jq -r '.doi // "unknown"')
+          echo "Published successfully. DOI: $doi"
+```
