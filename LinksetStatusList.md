@@ -12,6 +12,7 @@
 * CTD database (chemical-target, chemical-diseases, chemical-pathway associations: https://ctdbase.org/downloads)
 * TTRUST (transcription factor-target interactions: https://www.grnpedia.org/trrust/)
 * Reactome (pathway-gene associations: https://reactome.org/)
+* CollecTRI (transcription factor-target interactions: https://github.com/saezlab/collecTRI)
 
 # Status: license limitation
 _(aim to provide script for LinkSet creation but not redistribute data files)_
