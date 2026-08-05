@@ -290,7 +290,11 @@ jobs:
           version="$(cat build/version.txt)"
           current_date=$(date +%Y-%m-%d)
           n_species=$(( $(wc -l < build/manifest.tsv) - 1 ))
-          species_list=$(tail -n +2 build/manifest.tsv | cut -f3 | paste -sd'; ' -)
+          # awk, not `paste -sd'; '`: paste treats -d as a cyclic LIST of
+          # single-char delimiters, so '; ' alternates ';' and ' ' between
+          # items rather than joining with "; ".
+          species_list=$(tail -n +2 build/manifest.tsv | cut -f3 |
+            awk 'BEGIN{ORS=""} NR>1{print "; "} {print}')
           description="<p>This dataset contains linkset networks of pathway-gene interactions from WikiPathways release ${version}, in XGMML format, for ${n_species} species: ${species_list}.</p>"
 
           metadata=$(jq -n \
