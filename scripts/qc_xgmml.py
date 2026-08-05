@@ -21,9 +21,15 @@ input id, which this catches while a non-empty `identifiers` list alone does not
 The observed fraction is always reported when --mapped-type is given, so the
 mapping yield of a new species can be measured before a threshold is chosen.
 
+--labelled-type TYPE reports what fraction of nodes of that type carry a label
+that is not simply their own id, i.e. how many got a real name rather than a
+bare identifier. It is a probe, not a gate: there is no threshold, and unlike
+--mapped-type it stays silent when a file has no nodes of that type.
+
 Usage:
     python3 qc_xgmml.py [--allow-empty] [--min-nodes N] [--min-edges N]
-                        [--mapped-type TYPE --min-mapped-frac F] FILE_OR_GLOB...
+                        [--mapped-type TYPE --min-mapped-frac F]
+                        [--labelled-type TYPE] FILE_OR_GLOB...
 
 Each positional argument is treated as a glob (literal paths work too).
 Exit code is 0 only if every matched file passes; 1 otherwise.
@@ -54,7 +60,7 @@ def _att_index(element):
 
 
 def validate_file(path, allow_empty=False, min_nodes=0, min_edges=0,
-                  mapped_type=None, min_mapped_frac=0.0):
+                  mapped_type=None, min_mapped_frac=0.0, labelled_type=None):
     """Validate one XGMML file.
 
     Returns (errors, warnings, infos, n_nodes, n_edges).
@@ -62,8 +68,10 @@ def validate_file(path, allow_empty=False, min_nodes=0, min_edges=0,
     errors = []
     warnings = []
     infos = []
-    mapped_total = 0   # nodes whose type == mapped_type
-    mapped_ok = 0      # ...of those, with >1 identifier (got cross-references)
+    mapped_total = 0     # nodes whose type == mapped_type
+    mapped_ok = 0        # ...of those, with >1 identifier (got cross-references)
+    labelled_total = 0   # nodes whose type == labelled_type
+    labelled_ok = 0      # ...of those, whose label is not just their id
 
     try:
         root = ET.parse(path).getroot()
@@ -107,10 +115,19 @@ def validate_file(path, allow_empty=False, min_nodes=0, min_edges=0,
                 errors.append(f"node '{nid}' has an empty 'identifiers' list")
         if "type" not in by_name:
             errors.append(f"node '{nid}' has no 'type' attribute")
-        elif mapped_type is not None and by_name["type"].get("value") == mapped_type:
-            mapped_total += 1
-            if n_ident > 1:
-                mapped_ok += 1
+        else:
+            node_type = by_name["type"].get("value")
+            if mapped_type is not None and node_type == mapped_type:
+                mapped_total += 1
+                if n_ident > 1:
+                    mapped_ok += 1
+            if labelled_type is not None and node_type == labelled_type:
+                labelled_total += 1
+                label_att = by_name.get("label")
+                label = (label_att.get("value") if label_att is not None
+                         else node.get("label"))
+                if label and label != nid:
+                    labelled_ok += 1
         if "label" not in by_name and node.get("label") is None:
             warnings.append(f"node '{nid}' has no 'label'")
 
@@ -161,6 +178,17 @@ def validate_file(path, allow_empty=False, min_nodes=0, min_edges=0,
                     "BridgeDb mapping may have failed"
                 )
 
+    # Report-only: no threshold. How many nodes carry a real name rather than a
+    # bare identifier varies by species far too much for one floor to be useful
+    # (measured 81% to 100%), and the pipeline that builds the labels already
+    # fails earlier, with a better message, when the source is broken.
+    if labelled_type is not None and labelled_total:
+        frac = labelled_ok / labelled_total
+        infos.append(
+            f"{labelled_ok}/{labelled_total} ({frac:.1%}) '{labelled_type}' nodes "
+            "have a label that is not just their id"
+        )
+
     return (errors, warnings, infos, n_nodes, n_edges)
 
 
@@ -174,6 +202,9 @@ def main(argv=None):
                         help="node 'type' value to report BridgeDb mapping coverage for (e.g. gene)")
     parser.add_argument("--min-mapped-frac", type=float, default=0.0,
                         help="fail unless this fraction of --mapped-type nodes have >1 identifier")
+    parser.add_argument("--labelled-type", default=None,
+                        help="node 'type' value to report label coverage for (e.g. gene); "
+                             "reports only, never fails")
     args = parser.parse_args(argv)
 
     files = []
@@ -191,7 +222,8 @@ def main(argv=None):
     for path in files:
         errors, warnings, infos, n_nodes, n_edges = validate_file(
             path, allow_empty=args.allow_empty, min_nodes=args.min_nodes, min_edges=args.min_edges,
-            mapped_type=args.mapped_type, min_mapped_frac=args.min_mapped_frac
+            mapped_type=args.mapped_type, min_mapped_frac=args.min_mapped_frac,
+            labelled_type=args.labelled_type
         )
         status = "PASS" if not errors else "FAIL"
         if errors:

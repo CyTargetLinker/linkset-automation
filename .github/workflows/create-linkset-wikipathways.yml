@@ -163,6 +163,7 @@ jobs:
             python3 scripts/qc_xgmml.py \
               --min-nodes 1 --min-edges 1 \
               --mapped-type gene --min-mapped-frac "$frac" \
+              --labelled-type gene \
               "wikipathways_${code}.xgmml"
             echo "::endgroup::"
           done < <(tail -n +2 build/manifest.tsv)
@@ -310,7 +311,7 @@ jobs:
           # items rather than joining with "; ".
           species_list=$(tail -n +2 build/manifest.tsv | cut -f3 |
             awk 'BEGIN{ORS=""} NR>1{print "; "} {print}')
-          description="<p>This dataset contains linkset networks of pathway-gene interactions from WikiPathways release ${version}, in XGMML format, for ${n_species} species: ${species_list}.</p>"
+          description="<p>This dataset contains linkset networks of pathway-gene interactions from WikiPathways release ${version}, in XGMML format, for ${n_species} species: ${species_list}.</p><p>Gene nodes are labelled with the official gene symbol from NCBI Gene (gene_info); genes NCBI has not named keep their Entrez Gene ID as the label.</p>"
 
           metadata=$(jq -n \
             --arg title "WikiPathways Linksets" \

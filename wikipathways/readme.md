@@ -4,7 +4,7 @@ Pathway–gene linksets for 13 species, built from the WikiPathways GMT release.
 
 | | |
 | --- | --- |
-| Source | https://www.wikipathways.org (GMT files from https://data.wikipathways.org) |
+| Source | https://www.wikipathways.org (GMT files from https://data.wikipathways.org); gene symbols from NCBI Gene `gene_info` (public domain) |
 | License | CC BY 4.0 as deposited; WikiPathways content itself is CC0 1.0 |
 | DOI | [10.5281/zenodo.4500957](https://doi.org/10.5281/zenodo.4500957) (concept DOI, resolves to the latest version) |
 | Workflow | `.github/workflows/create-linkset-wikipathways.yml` |
@@ -18,8 +18,9 @@ Zenodo.
 
 `wp.py` resolves the release, downloads one GMT per species, and writes
 `input_<code>.txt` plus a generated `config/wp_<code>.config` for each. Genes
-enter as Entrez (`target_syscode_in=L` for every species) and BridgeDb expands
-them to Ensembl, Entrez and UniProt, plus HGNC for human.
+enter as Entrez (`target_syscode_in=L` for every species), are labelled with
+their NCBI gene symbol, and BridgeDb expands them to Ensembl, Entrez and
+UniProt, plus HGNC for human.
 
 ```bash
 python3 wikipathways/wp.py                        # all species, newest release
@@ -87,10 +88,21 @@ Accepted` and an empty body. 202 is a success code, so `wget` exits 0 and writes
 a zero-byte file — which is how the previous download failed. The script sends
 no spoofed user-agent and accepts only an explicit 200 that passes a zip test.
 
-## Known limitation: gene labels are Entrez IDs, not symbols
+## Gene labels
 
-The GMT contains only Entrez Gene IDs, so `wp.py` writes the same value into
-both the `gene_id` and `gene_symbol` columns and gene nodes are labelled with
-numbers in Cytoscape. Fixing it needs a symbol lookup after the GMT parse — NCBI
-`gene_info` maps GeneID to Symbol — or a return to the SPARQL endpoint, whose
-query returned a `GeneName` column.
+The GMT carries only Entrez Gene IDs, so `wp.py` looks each one up in that
+species' NCBI [`gene_info`](https://ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/)
+file (`<ncbi_clade>/<wp_token>.gene_info.gz`, ~24 MB for all 13) and writes the
+symbol into the column the config already uses as the label. Genes NCBI has not
+named (`LOC<GeneID>`, `NEWENTRY`) keep their Entrez ID.
+
+Coverage on release 20260710 was 98.9–100% for every species except Anopheles
+(81%). A species below `MIN_SYMBOL_FRAC` (0.5) fails the run, and so does a
+failed `gene_info` download: a number-labelled linkset is exactly the defect
+this replaces, it passes every other check, and Zenodo DOIs are immutable.
+
+BridgeDb cannot supply this outside human — `M`/`R`/`Z`/`F`/`W`/`D` are
+accessions (`MGI:98834`, `WBGene00000001`), not symbols, and only `H` (HGNC) is
+a symbol. Each `.bridge` does carry a `Symbol` attribute for every species, but
+linkset-creator reads labels only from an input column, so using it would mean a
+Java/JDBC step.

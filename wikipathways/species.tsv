@@ -1,31 +1,41 @@
 # The species built by wp.py. This is the only place the species list lives.
 #
+# Nothing reads this file positionally except load_species(), so a new column
+# may be inserted anywhere. (build/manifest.tsv is the opposite: the workflow
+# slices it with cut/read, so columns there may only be appended.)
+#
 # code              names input_<code>.txt, config/wp_<code>.config, wikipathways_<code>.xgmml
 # wp_token          species as spelled in the GMT filename
+# ncbi_clade        directory under ftp.ncbi.nlm.nih.gov/gene/DATA/GENE_INFO/ holding
+#                   <wp_token>.gene_info.gz, the GeneID -> Symbol table used for gene
+#                   labels. NCBI publishes per-species files for a shortlist only, so
+#                   check that listing before enabling a new species.
 # bridgedb_species  species key in bridgedb/data gene.json (not derivable from wp_token)
 # syscodes_out      BridgeDb systems to expand gene ids into; H (HGNC) is human-only
 # tier              core = a missing GMT fails the run; extra = skipped; off = not built
 # min_mapped_frac   QC floor for BridgeDb cross-reference coverage
 #
-# code	wp_token	bridgedb_species	syscodes_out	tier	min_mapped_frac
-hsa	Homo_sapiens	Homo sapiens	En,H,L,S	core	0.90
-mmu	Mus_musculus	Mus musculus	En,L,S	core	0.90
-rno	Rattus_norvegicus	Rattus norvegicus	En,L,S	core	0.90
-bta	Bos_taurus	Bos taurus	En,L,S	extra	0.80
-sce	Saccharomyces_cerevisiae	Saccharomyces cerevisiae	En,L,S	extra	0.80
-cel	Caenorhabditis_elegans	Caenorhabditis elegans	En,L,S	extra	0.80
-dre	Danio_rerio	Danio rerio	En,L,S	extra	0.80
-ptr	Pan_troglodytes	Pan troglodytes	En,L,S	extra	0.80
-cfa	Canis_familiaris	Canis familiaris	En,L,S	extra	0.80
-gga	Gallus_gallus	Gallus gallus	En,L,S	extra	0.80
-dme	Drosophila_melanogaster	Drosophila melanogaster	En,L,S	extra	0.80
-ath	Arabidopsis_thaliana	Arabidopsis thaliana	En,L,S	extra	0.80
-aga	Anopheles_gambiae	Anopheles gambiae	En,L,S	extra	0.80
+# code	wp_token	ncbi_clade	bridgedb_species	syscodes_out	tier	min_mapped_frac
+hsa	Homo_sapiens	Mammalia	Homo sapiens	En,H,L,S	core	0.90
+mmu	Mus_musculus	Mammalia	Mus musculus	En,L,S	core	0.90
+rno	Rattus_norvegicus	Mammalia	Rattus norvegicus	En,L,S	core	0.90
+bta	Bos_taurus	Mammalia	Bos taurus	En,L,S	extra	0.80
+sce	Saccharomyces_cerevisiae	Fungi	Saccharomyces cerevisiae	En,L,S	extra	0.80
+cel	Caenorhabditis_elegans	Invertebrates	Caenorhabditis elegans	En,L,S	extra	0.80
+dre	Danio_rerio	Non-mammalian_vertebrates	Danio rerio	En,L,S	extra	0.80
+ptr	Pan_troglodytes	Mammalia	Pan troglodytes	En,L,S	extra	0.80
+cfa	Canis_familiaris	Mammalia	Canis familiaris	En,L,S	extra	0.80
+gga	Gallus_gallus	Non-mammalian_vertebrates	Gallus gallus	En,L,S	extra	0.80
+dme	Drosophila_melanogaster	Invertebrates	Drosophila melanogaster	En,L,S	extra	0.80
+ath	Arabidopsis_thaliana	Plants	Arabidopsis thaliana	En,L,S	extra	0.80
+aga	Anopheles_gambiae	Invertebrates	Anopheles gambiae	En,L,S	extra	0.80
 #
 # Too few pathways to be a useful linkset (counts from release 20260710).
-# Uncomment and set tier to extra once WikiPathways has more content.
-# eca	Equus_caballus	Equus caballus	En,L,S	off	0.00	5 pathways
-# pop	Populus_trichocarpa	Populus trichocarpa	En,L,S	off	0.00	5 pathways
-# ssc	Sus_scrofa	Sus scrofa	En,L,S	off	0.00	2 pathways
-# sly	Solanum_lycopersicum	Solanum lycopersicum	En,L,S	off	0.00	1 pathway
-# zma	Zea_mays	Zea mays	En,L,S	off	0.00	1 pathway
+# Uncomment and set tier to extra once WikiPathways has more content. Note that
+# NCBI has no per-species gene_info for horse, tomato or poplar (only the
+# 100-460 MB All_<clade> files), so those three need a symbol source too.
+# eca	Equus_caballus	Mammalia	Equus caballus	En,L,S	off	0.00	5 pathways, no gene_info
+# pop	Populus_trichocarpa	Plants	Populus trichocarpa	En,L,S	off	0.00	5 pathways, no gene_info
+# ssc	Sus_scrofa	Mammalia	Sus scrofa	En,L,S	off	0.00	2 pathways
+# sly	Solanum_lycopersicum	Plants	Solanum lycopersicum	En,L,S	off	0.00	1 pathway, no gene_info
+# zma	Zea_mays	Plants	Zea mays	En,L,S	off	0.00	1 pathway
