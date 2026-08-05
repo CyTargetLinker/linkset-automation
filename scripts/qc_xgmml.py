@@ -18,6 +18,8 @@ BridgeDb mapping failure: among nodes whose `type` att equals TYPE, it fails
 unless at least fraction F carry more than one identifier (i.e. got expanded to
 cross-references). A mapper that failed to load leaves every node with only its
 input id, which this catches while a non-empty `identifiers` list alone does not.
+The observed fraction is always reported when --mapped-type is given, so the
+mapping yield of a new species can be measured before a threshold is chosen.
 
 Usage:
     python3 qc_xgmml.py [--allow-empty] [--min-nodes N] [--min-edges N]
@@ -53,21 +55,25 @@ def _att_index(element):
 
 def validate_file(path, allow_empty=False, min_nodes=0, min_edges=0,
                   mapped_type=None, min_mapped_frac=0.0):
-    """Validate one XGMML file. Returns (errors, warnings, n_nodes, n_edges)."""
+    """Validate one XGMML file.
+
+    Returns (errors, warnings, infos, n_nodes, n_edges).
+    """
     errors = []
     warnings = []
+    infos = []
     mapped_total = 0   # nodes whose type == mapped_type
     mapped_ok = 0      # ...of those, with >1 identifier (got cross-references)
 
     try:
         root = ET.parse(path).getroot()
     except ET.ParseError as e:
-        return ([f"not well-formed XML: {e}"], [], 0, 0)
+        return ([f"not well-formed XML: {e}"], [], [], 0, 0)
     except OSError as e:
-        return ([f"cannot read file: {e}"], [], 0, 0)
+        return ([f"cannot read file: {e}"], [], [], 0, 0)
 
     if _local(root.tag) != "graph":
-        return ([f"root element is <{_local(root.tag)}>, expected <graph>"], [], 0, 0)
+        return ([f"root element is <{_local(root.tag)}>, expected <graph>"], [], [], 0, 0)
     if not root.tag.startswith("{" + XGMML_NS + "}"):
         warnings.append(f"root namespace is not the XGMML namespace ({XGMML_NS})")
 
@@ -139,11 +145,15 @@ def validate_file(path, allow_empty=False, min_nodes=0, min_edges=0,
     if n_edges < min_edges:
         errors.append(f"only {n_edges} edges (min-edges={min_edges})")
 
-    if mapped_type is not None and min_mapped_frac > 0.0:
+    if mapped_type is not None:
         if mapped_total == 0:
             errors.append(f"no nodes of type '{mapped_type}' to check mapping coverage")
         else:
             frac = mapped_ok / mapped_total
+            infos.append(
+                f"{mapped_ok}/{mapped_total} ({frac:.1%}) '{mapped_type}' nodes "
+                "have cross-references"
+            )
             if frac < min_mapped_frac:
                 errors.append(
                     f"only {mapped_ok}/{mapped_total} ({frac:.1%}) '{mapped_type}' nodes "
@@ -151,7 +161,7 @@ def validate_file(path, allow_empty=False, min_nodes=0, min_edges=0,
                     "BridgeDb mapping may have failed"
                 )
 
-    return (errors, warnings, n_nodes, n_edges)
+    return (errors, warnings, infos, n_nodes, n_edges)
 
 
 def main(argv=None):
@@ -161,7 +171,7 @@ def main(argv=None):
     parser.add_argument("--min-nodes", type=int, default=0, help="fail if fewer than this many nodes")
     parser.add_argument("--min-edges", type=int, default=0, help="fail if fewer than this many edges")
     parser.add_argument("--mapped-type", default=None,
-                        help="node 'type' value to check BridgeDb mapping coverage for (e.g. gene)")
+                        help="node 'type' value to report BridgeDb mapping coverage for (e.g. gene)")
     parser.add_argument("--min-mapped-frac", type=float, default=0.0,
                         help="fail unless this fraction of --mapped-type nodes have >1 identifier")
     args = parser.parse_args(argv)
@@ -179,7 +189,7 @@ def main(argv=None):
 
     failed = 0
     for path in files:
-        errors, warnings, n_nodes, n_edges = validate_file(
+        errors, warnings, infos, n_nodes, n_edges = validate_file(
             path, allow_empty=args.allow_empty, min_nodes=args.min_nodes, min_edges=args.min_edges,
             mapped_type=args.mapped_type, min_mapped_frac=args.min_mapped_frac
         )
@@ -187,6 +197,8 @@ def main(argv=None):
         if errors:
             failed += 1
         print(f"{status}  {path}  ({n_nodes} nodes, {n_edges} edges)")
+        for i in infos:
+            print(f"        INFO: {i}")
         for e in errors:
             print(f"        ERROR: {e}")
         for w in warnings:
