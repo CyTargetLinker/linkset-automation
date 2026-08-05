@@ -10,6 +10,7 @@
 # Status: wishlist
 * DISEASES database (disease-gene associations: https://diseases.jensenlab.org/Downloads)
 * CTD database (chemical-target, chemical-diseases, chemical-pathway associations: https://ctdbase.org/downloads)
-* 
+* TTRUST (transcription factor-target interactions: https://www.grnpedia.org/trrust/)
+* Reactome (pathway-gene associations: https://reactome.org/)
 
 # Status: license limitation
