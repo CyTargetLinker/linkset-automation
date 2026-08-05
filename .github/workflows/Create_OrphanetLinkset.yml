@@ -11,6 +11,10 @@ on:
         description: "Publish even if Zenodo already has this Orphanet version"
         type: boolean
         default: false
+      bootstrap_zenodo:
+        description: "One-time: create the initial Zenodo DRAFT (does not publish)"
+        type: boolean
+        default: false
 
 concurrency:
   # Never run two workflows at once because the job modifies a Zenodo draft.
@@ -160,6 +164,13 @@ jobs:
             exit 0
           fi
 
+          if [ "${{ inputs.bootstrap_zenodo }}" = "true" ]; then
+            echo "bootstrap requested; creating the initial draft instead of publishing"
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            echo "bootstrap=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
           if [ -z "${ZENODO_DEPOSITION_ID}" ] || [ -z "${ZENODO_CONCEPT_ID}" ]; then
             echo "::warning::Orphanet has no configured Zenodo record."
 
@@ -196,6 +207,86 @@ jobs:
           fi
 
           echo "publish=true" >> "$GITHUB_OUTPUT"
+
+      - name: Bootstrap the initial Zenodo draft
+        if: steps.gate.outputs.bootstrap == 'true'
+        run: |
+          set -euo pipefail
+
+          if [ -n "${ZENODO_DEPOSITION_ID}" ]; then
+            echo "ZENODO_DEPOSITION_ID is already set to ${ZENODO_DEPOSITION_ID}."
+            echo "Bootstrap is a one-time action; refusing to create a second record."
+            exit 1
+          fi
+
+          version="${{ steps.gate.outputs.version }}"
+          current_date=$(date +%Y-%m-%d)
+
+          created=$(curl -sS --fail \
+            --header "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            --header "Content-Type: application/json" \
+            --request POST --data '{}' \
+            "https://zenodo.org/api/deposit/depositions")
+
+          dep_id=$(echo "$created" | jq -r '.id')
+          concept_id=$(echo "$created" | jq -r '.conceptrecid')
+          bucket=$(echo "$created" | jq -r '.links.bucket')
+          if [ "$dep_id" = "null" ] || [ -z "$dep_id" ]; then
+            echo "Failed to create deposition. Response: $created"
+            exit 1
+          fi
+
+          echo "Uploading Orphanet.xgmml..."
+          curl --fail --progress-bar \
+            --header "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            --upload-file "Orphanet.xgmml" "$bucket/Orphanet.xgmml"
+
+          description="<p>This dataset contains a linkset network of rare disease–gene associations derived from Orphadata ${version}, in XGMML format.</p><p>The dataset contains human rare diseases and their associated genes and is intended for use with CyTargetLinker.</p>"
+
+          metadata=$(jq -n \
+            --arg title "Orphanet Rare Disease–Gene Linkset" \
+            --arg version "$version" \
+            --arg date "$current_date" \
+            --arg description "$description" \
+            --argjson communities '[{"identifier": "cytargetlinker"}]' \
+            --argjson creators '[
+              {"name": "Kutmon, Martina", "affiliation": "Maastricht University", "orcid": "0000-0002-7699-8191"},
+              {"name": "Martens, Marvin", "affiliation": "Maastricht University", "orcid": "0000-0003-2230-0840"},
+              {"name": "Ehrhart, Friederike", "affiliation": "Maastricht University", "orcid": "0000-0002-7770-620X"}
+            ]' \
+            --argjson related_identifiers '[
+              {"identifier": "https://www.orphadata.com/", "relation": "isDerivedFrom", "resource_type": "dataset", "scheme": "url"}
+            ]' \
+            '{ metadata: {
+                 title: $title, version: $version, publication_date: $date,
+                 description: $description, access_right: "open",
+                 upload_type: "dataset", language: "eng",
+                 license: "cc-by-4.0", creators: $creators,
+                 related_identifiers: $related_identifiers,
+                 references: ["Orphadata: Free access data from Orphanet. https://www.orphadata.com/"],
+                 communities: $communities } }')
+
+          curl -sS --fail \
+            --header "Authorization: Bearer ${{ secrets.ZENODO_ACCESS_TOKEN }}" \
+            --header "Content-Type: application/json" \
+            --request PUT --data "$metadata" \
+            "https://zenodo.org/api/deposit/depositions/${dep_id}" > /dev/null
+
+          {
+            echo "### Orphanet Zenodo draft created"
+            echo
+            echo "The draft is **not published** — review it, then publish it once by hand."
+            echo "Drafts are visible only to the account that owns \`ZENODO_ACCESS_TOKEN\`,"
+            echo "via https://zenodo.org/me/uploads"
+            echo
+            echo "| | |"
+            echo "| --- | --- |"
+            echo "| \`ZENODO_DEPOSITION_ID\` | \`${dep_id}\` |"
+            echo "| \`ZENODO_CONCEPT_ID\` | \`${concept_id}\` |"
+            echo
+            echo "Put both IDs in the \`env:\` block of this workflow."
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "deposition=${dep_id} concept=${concept_id}"
 
       - name: Discard current Zenodo draft
         if: steps.gate.outputs.publish == 'true'
