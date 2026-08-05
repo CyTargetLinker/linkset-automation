@@ -5,6 +5,7 @@ __pycache__/
 # Downloaded source data
 *.gz
 gene2go*
+*.obo
 
 # BridgeDb identifier-mapping files
 *.bridge

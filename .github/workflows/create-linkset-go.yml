@@ -56,16 +56,20 @@ jobs:
             -O bridgedb/hsa.bridge "$norm"
           unzip -t bridgedb/hsa.bridge >/dev/null 2>&1 || { echo "BAD ZIP: hsa.bridge"; exit 1; }
 
-      - name: Create Linkset XGMML file
+      - name: Create & QC one linkset per GO aspect (BP / MF / CC)
         run: |
-          java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
-            -c go/go_hsa.config \
-            -i input_hsa.txt \
-            -o go_hsa.xgmml
-          ls -la go_hsa.xgmml
+          for a in bp mf cc; do
+            java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
+              -c go/go_hsa_${a}.config \
+              -i input_hsa_${a}.txt \
+              -o go_hsa_${a}.xgmml
+            python3 scripts/qc_xgmml.py --min-nodes 1 --min-edges 1 \
+              --mapped-type gene --min-mapped-frac 0.9 go_hsa_${a}.xgmml
+          done
+          ls -la go_hsa_*.xgmml
 
-      - name: Upload linkset artifact
+      - name: Upload linkset artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: go-linkset
-          path: go_hsa.xgmml
+          name: go-linksets
+          path: go_hsa_*.xgmml
