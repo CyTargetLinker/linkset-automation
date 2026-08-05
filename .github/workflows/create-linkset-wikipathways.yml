@@ -80,10 +80,10 @@ jobs:
         run: pip3 install requests
 
       # Resolves the WikiPathways release, writes input_<code>.txt and a
-      # generated wp_<code>.config per species, and writes build/manifest.tsv
-      # listing the species it actually built. Every later step iterates the
-      # manifest, so a species skipped here cannot leave a step looking for a
-      # file that was never produced.
+      # generated wikipathways/config/wp_<code>.config per species, and writes
+      # build/manifest.tsv listing the species it actually built. Every later
+      # step iterates the manifest, so a species skipped here cannot leave a
+      # step looking for a file that was never produced.
       - name: Preprocess WikiPathways GMTs
         env:
           WP_SPECIES: ${{ inputs.species }}
@@ -116,7 +116,7 @@ jobs:
             scripts/fetch-bridge.sh "$url" "bridgedb/${code}.bridge"
 
             java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
-              -c "wikipathways/wp_${code}.config" \
+              -c "wikipathways/config/wp_${code}.config" \
               -i "input_${code}.txt" \
               -o "wikipathways_${code}.xgmml"
 
@@ -175,6 +175,16 @@ jobs:
 
           if [ "$zen_version" = "$wp_version" ] && [ "${{ inputs.force_publish }}" != "true" ]; then
             echo "Zenodo already publishes WikiPathways $wp_version; nothing new to release."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          # Releases are YYYYMMDD, so a string compare orders them. wp.py falls
+          # back to the previous release when the newest one is still being
+          # published, and that must never walk the record backwards.
+          if [ -n "$zen_version" ] && [ "$wp_version" \< "$zen_version" ]; then
+            echo "Built WikiPathways $wp_version, but Zenodo already publishes the newer $zen_version."
+            echo "Refusing to publish an older release."
             echo "publish=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi

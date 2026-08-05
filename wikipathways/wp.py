@@ -3,8 +3,8 @@
 
 For every species listed in wikipathways/species.tsv this writes:
 
-    input_<code>.txt                 tab-delimited pathway-gene pairs
-    wikipathways/wp_<code>.config    generated from wp.config.template
+    input_<code>.txt                        tab-delimited pathway-gene pairs
+    wikipathways/config/wp_<code>.config    generated from wp.config.template
 
 plus two files describing the build:
 
@@ -18,10 +18,19 @@ BridgeDb download or an XGMML file that was never produced.
 Release resolution
 ------------------
 data.wikipathways.org keeps only a rolling 12-month window of monthly releases,
-so the release is read from the GMT directory index rather than pinned in
-source. Files are then fetched from the resolved /<version>/ path, never from
-/current/, so a release flipping mid-run cannot yield a linkset built from two
-releases.
+so the release is discovered rather than pinned in source.
+
+Resolution deliberately walks the dated release directories listed on the site
+root (20260710/, 20260610/, ...) newest first, rather than trusting /current/.
+/current/ is a moving alias and says nothing about whether that release is
+complete; a dated directory that contains a GMT for every core species is
+positive evidence that the release actually shipped. An incomplete newest
+directory (a release still being published) is skipped with a warning and the
+previous one is used, which is safe because the workflow refuses to publish a
+release older than the one already on Zenodo.
+
+Files are then fetched from the resolved /<version>/ path, so a release
+appearing mid-run cannot yield a linkset built from two releases.
 
 Environment overrides (both wired to the workflow's manual-dispatch inputs):
     WP_VERSION   build a specific release instead of the current one
@@ -39,10 +48,20 @@ import requests
 BASE_URL = "https://data.wikipathways.org"
 SPECIES_TSV = "wikipathways/species.tsv"
 CONFIG_TEMPLATE = "wikipathways/wp.config.template"
+# Generated per-species configs live together in their own directory, so the
+# whole directory can be gitignored and cleared without touching sources.
+CONFIG_DIR = "wikipathways/config"
 BUILD_DIR = "build"
 
 # wikipathways-<YYYYMMDD>-gmt-<Genus_species>.gmt
 GMT_RE = re.compile(r"wikipathways-(\d{8})-gmt-([A-Za-z_]+)\.gmt")
+
+# Dated release directories linked from the site root, e.g. href="20260710"
+RELEASE_RE = re.compile(r'href="(\d{8})/?"')
+
+# How many dated directories to look at before giving up. More than a couple of
+# incomplete releases in a row is a problem to report, not to work around.
+MAX_RELEASE_CANDIDATES = 3
 
 # An 'extra' species with fewer pathways than this is not worth a linkset and is
 # skipped; a 'core' species below it means something is wrong upstream.
@@ -59,36 +78,85 @@ INPUT_COLUMNS = [
 ]
 
 
-def resolve_release():
-    """Return (version, {wp_token: gmt_filename}) for the release to build."""
-    pinned = os.environ.get("WP_VERSION", "").strip()
-    index = f"{BASE_URL}/{pinned}/gmt/" if pinned else f"{BASE_URL}/current/gmt/"
-    print(f"resolving release from {index}")
-
-    response = requests.get(index, timeout=120)
+def list_releases():
+    """Return the dated release directories on the site root, newest first."""
+    response = requests.get(f"{BASE_URL}/", timeout=120)
     response.raise_for_status()
+    releases = sorted({match.group(1) for match in RELEASE_RE.finditer(response.text)},
+                      reverse=True)
+    if not releases:
+        sys.exit(f"ERROR: no dated release directories found at {BASE_URL}/ "
+                 "(index format changed?)")
+    return releases
+
+
+def read_release(version):
+    """Return {wp_token: gmt_filename} for one dated release, or {} if unusable."""
+    index = f"{BASE_URL}/{version}/gmt/"
+    try:
+        response = requests.get(index, timeout=120)
+        response.raise_for_status()
+    except requests.RequestException as error:
+        print(f"  {version}: cannot read {index} ({error})")
+        return {}
 
     found = {}
     for match in GMT_RE.finditer(response.text):
         found[match.group(2)] = (match.group(1), match.group(0))
     if not found:
-        sys.exit(f"ERROR: no GMT filenames found at {index} (index format changed?)")
+        print(f"  {version}: no GMT files listed")
+        return {}
 
-    versions = {version for version, _ in found.values()}
-    if len(versions) != 1:
-        # Building one linkset from two releases is far worse than not building.
-        sys.exit(f"ERROR: {index} mixes releases {sorted(versions)}; refusing to build")
-    version = versions.pop()
-    if pinned and version != pinned:
-        sys.exit(f"ERROR: asked for release {pinned} but the index served {version}")
+    stamped = {stamp for stamp, _ in found.values()}
+    if stamped != {version}:
+        # A dated directory holding differently-stamped files is not a release
+        # we can reason about; building from it could mix two releases.
+        print(f"  {version}: contains files stamped {sorted(stamped)}")
+        return {}
 
-    print(f"  release {version}, {len(found)} species available")
-    return version, {token: name for token, (_, name) in found.items()}
+    return {token: name for token, (_, name) in found.items()}
 
 
-def load_species(path=SPECIES_TSV):
-    """Read species.tsv, honouring WP_SPECIES and dropping 'off' rows."""
-    only = set(os.environ.get("WP_SPECIES", "").split())
+def resolve_release(required_tokens):
+    """Return (version, {wp_token: gmt_filename}) for the newest usable release.
+
+    A release counts as published only once it carries a GMT for every core
+    species; /current/ is not consulted because it is an alias that says
+    nothing about whether the release behind it is complete.
+    """
+    pinned = os.environ.get("WP_VERSION", "").strip()
+    candidates = [pinned] if pinned else list_releases()[:MAX_RELEASE_CANDIDATES]
+    print(f"resolving release from {BASE_URL}/ "
+          f"(candidates: {', '.join(candidates)})")
+
+    for version in candidates:
+        available = read_release(version)
+        if not available:
+            continue
+        missing = sorted(required_tokens - available.keys())
+        if missing:
+            print(f"  {version}: incomplete, missing {', '.join(missing)}")
+            continue
+        if not version.endswith("10"):
+            # WikiPathways releases on the 10th; a different day is worth
+            # noticing but is not a reason to refuse to build.
+            print(f"  WARNING: release {version} is not dated the 10th")
+        print(f"  using release {version} ({len(available)} species available)")
+        return version, available
+
+    if pinned:
+        sys.exit(f"ERROR: release {pinned} is missing or incomplete")
+    sys.exit(f"ERROR: none of the {len(candidates)} newest releases "
+             f"({', '.join(candidates)}) is complete")
+
+
+def load_species(path=SPECIES_TSV, apply_filter=True):
+    """Read species.tsv, dropping 'off' rows.
+
+    WP_SPECIES narrows the result unless apply_filter is False, which the
+    caller uses to ask what the full enabled set is regardless of the filter.
+    """
+    only = set(os.environ.get("WP_SPECIES", "").split()) if apply_filter else set()
     rows = []
     with open(path, encoding="utf-8") as handle:
         for line in handle:
@@ -178,7 +246,7 @@ def write_input(code, pathways):
 
 
 def write_config(species, version, template):
-    """Generate wikipathways/wp_<code>.config from the template."""
+    """Generate wikipathways/config/wp_<code>.config from the template."""
     text = template.format(
         organism=species["organism"],
         version=version,
@@ -192,14 +260,21 @@ def write_config(species, version, template):
         if line.strip() and line.count("=") != 1:
             sys.exit(f"ERROR: generated config line is not a single key=value pair: {line!r}")
 
-    out = pathlib.Path(f"wikipathways/wp_{species['code']}.config")
+    out = pathlib.Path(CONFIG_DIR) / f"wp_{species['code']}.config"
+    out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(text, encoding="utf-8")
     return out
 
 
 def main():
-    version, available = resolve_release()
     species_list = load_species()
+    # A release counts as published once every core species is in it. Read that
+    # from the whole table, not the WP_SPECIES-filtered view: whether a release
+    # shipped does not depend on which subset this run was asked to build.
+    core_tokens = {species["wp_token"]
+                   for species in load_species(apply_filter=False)
+                   if species["tier"] == "core"}
+    version, available = resolve_release(core_tokens)
     template = pathlib.Path(CONFIG_TEMPLATE).read_text(encoding="utf-8")
 
     built = []
