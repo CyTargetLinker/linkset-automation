@@ -1,13 +1,47 @@
 from chembl_webresource_client.new_client import new_client
 from chembl_webresource_client.settings import Settings
 import pandas as pd
+import pathlib
 import re
+import requests
 import sys
 from datetime import datetime
+
+# The release is resolved at run time rather than pinned in the config: the
+# client always fetches whatever ChEMBL is serving now, so a hand-edited version
+# silently mislabels the linkset as soon as ChEMBL releases.
+CHEMBL_STATUS_URL = "https://www.ebi.ac.uk/chembl/api/data/status.json"
+CONFIG_TEMPLATE = "CHEMBL/chembl_human_MoA.config.template"
+CONFIG_OUT = "CHEMBL/config/chembl_human_MoA.config"
+BUILD_DIR = "build"
 
 Settings.Instance().TIMEOUT = 60
 Settings.Instance().CACHING = True
 Settings.Instance().CONCURRENT_SIZE = 20
+
+
+def resolve_version():
+    """Return the ChEMBL release the API is currently serving, e.g. ChEMBL_37."""
+    response = requests.get(CHEMBL_STATUS_URL, timeout=60)
+    response.raise_for_status()
+    version = (response.json().get('chembl_db_version') or '').strip()
+    if not version:
+        sys.exit(f"ERROR: no chembl_db_version at {CHEMBL_STATUS_URL}")
+    return version
+
+
+def write_config(version):
+    """Generate the linkset-creator config for this release."""
+    text = pathlib.Path(CONFIG_TEMPLATE).read_text(encoding='utf-8').format(version=version)
+    # ConfigFileReader keeps only lines splitting into exactly two parts on '=',
+    # discarding the rest as an invalid attribute.
+    for line in text.splitlines():
+        if line.strip() and line.count('=') != 1:
+            sys.exit(f"ERROR: generated config line is not a single key=value pair: {line!r}")
+    out = pathlib.Path(CONFIG_OUT)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    out.write_text(text, encoding='utf-8')
+    return out
 
 
 def get_all_mechanisms_count():
@@ -211,7 +245,7 @@ def download_all_mechanism_data(limit_compounds=None, human_only=False, tqdm_cla
                         'ref_url'            : mechanism_refs[0].get('ref_url', '')  if mechanism_refs else '',
                     }
 
-                    # one row per target component; see CHEMBL/readme.md
+                    # one row per target component
                     for component in (target_info.get('components') or [{}]):
                         row = dict(record)
                         row['uniprot_accessions'] = component.get('uniprot_accessions', '')
@@ -233,7 +267,7 @@ def download_all_mechanism_data(limit_compounds=None, human_only=False, tqdm_cla
     df = pd.DataFrame(all_data)
     df_unique = df.drop_duplicates(subset=['mechanism_id', 'gene_symbol', 'hgnc_id'])
 
-    # Rows must stay full width for the jar's split(); see CHEMBL/readme.md.
+    # Keep rows full width: the jar splits on tabs and drops trailing empties.
     df_unique = df_unique.map(
         lambda v: re.sub(r'[\r\n\t]+', ' ', v).strip() if isinstance(v, str) else v
     )
@@ -291,6 +325,10 @@ if __name__ == "__main__":
     data = download_all_mechanism_data(human_only=True, limit_compounds=limit,
                                        tqdm_class=tqdm_class)
     if data is not None:
+        version = resolve_version()
+        pathlib.Path(BUILD_DIR).mkdir(exist_ok=True)
+        pathlib.Path(BUILD_DIR, "version.txt").write_text(version + "\n", encoding='utf-8')
+        print(f"ChEMBL release {version} -> {write_config(version)}")
         print(f"\nDone! End time: {datetime.now()}")
     else:
         print("Download failed.")

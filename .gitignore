@@ -38,6 +38,7 @@ other.json
 # their .config.template files (never hand-edited).
 wikipathways/config/
 reactome/config/
+CHEMBL/config/
 
 # Reactome's pathway-gene table, downloaded by reactome.py.
 NCBI2Reactome.txt
