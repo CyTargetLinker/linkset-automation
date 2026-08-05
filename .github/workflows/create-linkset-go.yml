@@ -1,0 +1,75 @@
+name: Create GO linkset
+
+on:
+  workflow_dispatch:
+
+jobs:
+  create-linkset:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Restore linkset-creator jar from cache
+        uses: actions/cache@v4
+        id: cache-jar
+        with:
+          path: ./linkset-creator-v2.0.jar
+          key: cached-linkset-creator-v2.0-jar
+
+      - name: Download linkset-creator jar if cache missed
+        if: steps.cache-jar.outputs.cache-hit != 'true'
+        run: |
+          wget -O linkset-creator-v2.0.jar \
+            https://github.com/CyTargetLinker/linksetCreator/releases/download/v2.0/linkset-creator-v2.0.jar
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+
+      - name: Install dependencies with pip
+        run: pip3 install requests
+
+      - name: Run preprocessing (downloads gene2go, writes input_hsa.txt)
+        run: python3 go/go.py
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Download human BridgeDb file (latest figshare URL from bridgedb/data)
+        run: |
+          mkdir -p bridgedb
+          # gene.json in github.com/bridgedb/data holds the latest per-species .bridge URLs.
+          curl -sL "https://raw.githubusercontent.com/bridgedb/data/main/gene.json" -o gene.json
+          ua="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+          url=$(jq -r '.mappingFiles[] | select(.species=="Homo sapiens") | .downloadURL' gene.json)
+          # figshare needs the ndownloader host + a browser UA/Referer
+          norm="${url/https:\/\/figshare.com\/ndownloader/https:\/\/ndownloader.figshare.com}"
+          echo "Downloading human bridge from $norm"
+          wget --quiet --user-agent="$ua" --header="Referer: https://figshare.com/" \
+            -O bridgedb/hsa.bridge "$norm"
+          unzip -t bridgedb/hsa.bridge >/dev/null 2>&1 || { echo "BAD ZIP: hsa.bridge"; exit 1; }
+
+      - name: Create & QC one linkset per GO aspect (BP / MF / CC)
+        run: |
+          for a in bp mf cc; do
+            java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
+              -c go/go_hsa_${a}.config \
+              -i input_hsa_${a}.txt \
+              -o go_hsa_${a}.xgmml
+            python3 scripts/qc_xgmml.py --min-nodes 1 --min-edges 1 \
+              --mapped-type gene --min-mapped-frac 0.9 go_hsa_${a}.xgmml
+          done
+          ls -la go_hsa_*.xgmml
+
+      - name: Upload linkset artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: go-linksets
+          path: go_hsa_*.xgmml
