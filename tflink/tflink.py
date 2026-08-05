@@ -26,10 +26,13 @@ BASE_URL = "https://cdn.netbiol.org/tflink/download_files"
 CONFIDENCE = "SS"
 
 # (TFLink organism name as used in the file name, CyTargetLinker short code)
+# Rattus norvegicus is deliberately absent: TFLink v1.0 has 8 small-scale rat
+# interactions, which builds a 12-node network rather than a usable linkset.
+# Zebrafish has no small-scale data at all. Add rat back if a later TFLink
+# release carries real small-scale coverage for it.
 SPECIES = [
     ("Homo_sapiens", "hsa"),
     ("Mus_musculus", "mmu"),
-    ("Rattus_norvegicus", "rno"),
     ("Drosophila_melanogaster", "dme"),
     ("Caenorhabditis_elegans", "cel"),
     ("Saccharomyces_cerevisiae", "sce"),

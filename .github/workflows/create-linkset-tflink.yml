@@ -91,7 +91,6 @@ jobs:
           for entry in \
             "Homo sapiens|hsa" \
             "Mus musculus|mmu" \
-            "Rattus norvegicus|rno" \
             "Drosophila melanogaster|dme" \
             "Caenorhabditis elegans|cel" \
             "Saccharomyces cerevisiae|sce"; do
