@@ -11,6 +11,7 @@ from datetime import datetime
 # client always fetches whatever ChEMBL is serving now, so a hand-edited version
 # silently mislabels the linkset as soon as ChEMBL releases.
 CHEMBL_STATUS_URL = "https://www.ebi.ac.uk/chembl/api/data/status.json"
+CHEMBL_MECHANISM_URL = "https://www.ebi.ac.uk/chembl/api/data/mechanism.json"
 CONFIG_TEMPLATE = "CHEMBL/chembl_human_MoA.config.template"
 CONFIG_OUT = "CHEMBL/config/chembl_human_MoA.config"
 BUILD_DIR = "build"
@@ -45,11 +46,15 @@ def write_config(version):
 
 
 def get_all_mechanisms_count():
-    mechanism = new_client.mechanism
+    # Read the count from page_meta rather than by listing every record: an
+    # unbounded mechanism.json request now fails at EBI, and the count is only
+    # used as a sanity check that the API is answering.
     try:
-        all_mechanisms_list = list(mechanism.filter())
-        print(f"Total mechanisms in ChEMBL: {len(all_mechanisms_list)}")
-        return len(all_mechanisms_list)
+        response = requests.get(CHEMBL_MECHANISM_URL, params={'limit': 1}, timeout=60)
+        response.raise_for_status()
+        total = response.json().get('page_meta', {}).get('total_count', 0)
+        print(f"Total mechanisms in ChEMBL: {total}")
+        return total
     except Exception as e:
         print(f"Error getting mechanisms: {e}")
         return 0
@@ -319,8 +324,10 @@ if __name__ == "__main__":
 
     total = get_all_mechanisms_count()
     if not total:
+        # Non-zero, so the failure is reported by this step rather than as a
+        # missing input.txt two steps later.
         print("Could not get count. Exiting.")
-        exit()
+        sys.exit(1)
 
     data = download_all_mechanism_data(human_only=True, limit_compounds=limit,
                                        tqdm_class=tqdm_class)
@@ -332,3 +339,4 @@ if __name__ == "__main__":
         print(f"\nDone! End time: {datetime.now()}")
     else:
         print("Download failed.")
+        sys.exit(1)
