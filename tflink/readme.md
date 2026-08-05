@@ -80,23 +80,24 @@ the confidence level changes what the linkset contains.
 
 ### Record
 
-Bootstrapped on 2026-08-05; the IDs are set in the workflow `env:` block.
+Bootstrapped and published 2026-08-05, in the `cytargetlinker` community.
 
 | | |
 | --- | --- |
-| Deposition | `21804829` |
-| Concept (all-versions) | `21804828` |
-| Concept DOI | `10.5281/zenodo.21804828` |
+| Concept DOI | [10.5281/zenodo.21804828](https://doi.org/10.5281/zenodo.21804828) — always the latest version |
+| First version | `10.5281/zenodo.21804829` (`v1.0-SS`) |
+| Deposition ID | `21804829` |
+| Concept ID | `21804828` |
 
-**The first version is still an unpublished draft.** Minting a DOI is
-irreversible, so the initial public record was left for a human to review and
-publish: https://zenodo.org/deposit/21804829
+Both IDs are set in the workflow `env:` block, so later runs version the record
+by themselves, exactly as the WikiPathways one does.
 
-Once it is published, add the concept DOI to the resource table in the
-top-level `README.md`. Every later run then versions the record by itself,
-exactly as the WikiPathways one does.
+The account that owns the record is the one `ZENODO_ACCESS_TOKEN` belongs to —
+the same account that owns the WikiPathways deposit. Drafts are only visible to
+that account, so check https://zenodo.org/me/uploads while logged in as it
+rather than looking for a draft URL.
 
-The `bootstrap_zenodo` input that created it refuses to run now that
+The `bootstrap_zenodo` input that created the record refuses to run now that
 `ZENODO_DEPOSITION_ID` is set, so it cannot mint a second record by accident.
 
 ## BridgeDb downloads
