@@ -14,3 +14,8 @@
 * Reactome (pathway-gene associations: https://reactome.org/)
 
 # Status: license limitation
+_(aim to provide script but not redistribute data files)_
+* DrugBank
+* DisGenNet
+
+
