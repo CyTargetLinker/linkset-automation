@@ -406,4 +406,3 @@ jobs:
 
           doi=$(echo "$publish_response" | jq -r '.doi // "unknown"')
           echo "Published successfully. DOI: $doi"
-```
