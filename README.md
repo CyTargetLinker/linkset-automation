@@ -3,6 +3,25 @@ Under construction: This repo automatically generates CyTargetLinker linksets fr
 
 <img width="692" height="347" alt="image" src="https://github.com/user-attachments/assets/100e64c0-d6e5-47c9-8686-7be01c39c257" />
 
+## Linkset resources
+
+**This list is still being extended.** The resources below are the ones
+covered so far; more are being added as they are automated, and the table is
+updated once a resource is built and deposited.
+
+| Resource | Persistent DOI | License |
+| --- | --- | --- |
+| [WikiPathways](https://www.wikipathways.org) (human, mouse, rat) | [10.5281/zenodo.4500957](https://doi.org/10.5281/zenodo.4500957) | CC BY 4.0 |
+| [Gene Ontology](https://geneontology.org) (BP / MF / CC, human) | not yet deposited | CC BY 4.0 |
+| [TFLink](https://tflink.net) | not yet deposited | Free for non-commercial use |
+| [ChEMBL](https://www.ebi.ac.uk/chembl/) (mechanism of action) | not yet deposited | CC BY-SA 3.0 |
+
+Each resource name links to its upstream source. The DOI column holds the
+Zenodo *concept* DOI, which always resolves to the latest published version;
+individual versions have their own DOIs. For resources that are not yet
+deposited the license shown is that of the upstream source data, and the
+license of the eventual deposit still needs to be decided.
+
 ## (Intended) Workflow
 1. Run the bridgeDb update script to update bridgeDb versions for all config files.
 2. Check the download link for the resource you want to update (check if an update is required) and copy it into the (data preprocessing) script
