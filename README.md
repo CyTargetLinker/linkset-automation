@@ -1,7 +1,6 @@
 # linkset-automation
 
 [![WikiPathways linkset](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/create-linkset-wikipathways.yml?label=WikiPathways%20linkset)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/create-linkset-wikipathways.yml)
-[![GO linkset](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/create-linkset-go.yml?label=GO%20linkset)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/create-linkset-go.yml)
 [![TFLink linkset](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/create-linkset-tflink.yml?label=TFLink%20linkset)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/create-linkset-tflink.yml)
 [![QC XGMML](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/qc-xgmml.yml?label=QC%20XGMML)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/qc-xgmml.yml)
 [![BridgeDb cache](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/update-bridgedb.yml?label=BridgeDb%20cache)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/update-bridgedb.yml)
@@ -19,7 +18,6 @@ updated once a resource is built and deposited.
 | Resource | Details | Persistent DOI | License |
 | --- | --- | --- | --- |
 | [WikiPathways](https://www.wikipathways.org) (13 species) | [`wikipathways/`](wikipathways/readme.md) | [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.4500957.svg)](https://doi.org/10.5281/zenodo.4500957) | CC BY 4.0 |
-| [Gene Ontology](https://geneontology.org) (BP / MF / CC, human) | [`go/`](go/readme.md) | not deposited (paused before release) | CC BY 4.0 |
 | [TFLink](https://tflink.net) | [`tflink/`](tflink/readme.md) | not yet deposited | CC BY-NC 4.0 |
 | [ChEMBL](https://www.ebi.ac.uk/chembl/) (mechanism of action) | [`CHEMBL/`](CHEMBL/readme.md) | not yet deposited | CC BY-SA 3.0 |
 

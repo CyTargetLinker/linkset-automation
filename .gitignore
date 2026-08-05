@@ -9,8 +9,6 @@ __pycache__/
 *.gmt
 *.gz
 TFLink_*.tsv
-gene2go*
-*.obo
 
 # BridgeDb identifier-mapping files
 *.bridge
