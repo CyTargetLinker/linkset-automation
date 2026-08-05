@@ -32,13 +32,16 @@ release older than the one already on Zenodo.
 Files are then fetched from the resolved /<version>/ path, so a release
 appearing mid-run cannot yield a linkset built from two releases.
 
-Environment overrides (both wired to the workflow's manual-dispatch inputs):
-    WP_VERSION   build a specific release instead of the current one
-    WP_SPECIES   space-separated codes to build instead of all enabled ones
+Both arguments are optional and are wired to the workflow's manual-dispatch
+inputs:
+
+    python3 wikipathways/wp.py                              # all species, current release
+    python3 wikipathways/wp.py --species sce aga            # just these two
+    python3 wikipathways/wp.py --version 20260510           # a specific release
 """
 
+import argparse
 import csv
-import os
 import pathlib
 import re
 import sys
@@ -117,14 +120,13 @@ def read_release(version):
     return {token: name for token, (_, name) in found.items()}
 
 
-def resolve_release(required_tokens):
+def resolve_release(required_tokens, pinned=None):
     """Return (version, {wp_token: gmt_filename}) for the newest usable release.
 
     A release counts as published only once it carries a GMT for every core
     species; /current/ is not consulted because it is an alias that says
     nothing about whether the release behind it is complete.
     """
-    pinned = os.environ.get("WP_VERSION", "").strip()
     candidates = [pinned] if pinned else list_releases()[:MAX_RELEASE_CANDIDATES]
     print(f"resolving release from {BASE_URL}/ "
           f"(candidates: {', '.join(candidates)})")
@@ -150,13 +152,14 @@ def resolve_release(required_tokens):
              f"({', '.join(candidates)}) is complete")
 
 
-def load_species(path=SPECIES_TSV, apply_filter=True):
+def load_species(selected=None, path=SPECIES_TSV):
     """Read species.tsv, dropping 'off' rows.
 
-    WP_SPECIES narrows the result unless apply_filter is False, which the
-    caller uses to ask what the full enabled set is regardless of the filter.
+    `selected` narrows the result to those codes; None returns the full enabled
+    set, which the caller uses to ask what a release must contain regardless of
+    which subset this run was asked to build.
     """
-    only = set(os.environ.get("WP_SPECIES", "").split()) if apply_filter else set()
+    only = set(selected or ())
     rows = []
     with open(path, encoding="utf-8") as handle:
         for line in handle:
@@ -180,10 +183,10 @@ def load_species(path=SPECIES_TSV, apply_filter=True):
 
     if not rows:
         sys.exit(f"ERROR: no species selected from {path}"
-                 + (f" (WP_SPECIES={' '.join(sorted(only))})" if only else ""))
+                 + (f" (--species {' '.join(sorted(only))})" if only else ""))
     unknown = only - {row["code"] for row in rows}
     if unknown:
-        sys.exit(f"ERROR: WP_SPECIES names species not enabled in {path}: "
+        sys.exit(f"ERROR: --species names species not enabled in {path}: "
                  f"{' '.join(sorted(unknown))}")
     return rows
 
@@ -266,15 +269,29 @@ def write_config(species, version, template):
     return out
 
 
-def main():
-    species_list = load_species()
+def parse_args(argv=None):
+    parser = argparse.ArgumentParser(
+        description="Build WikiPathways linkset inputs and configs.")
+    parser.add_argument(
+        "--version", metavar="YYYYMMDD",
+        help="WikiPathways release to build (default: the newest complete one)")
+    parser.add_argument(
+        "--species", nargs="+", metavar="CODE",
+        help="species codes to build, e.g. hsa sce (default: all enabled)")
+    return parser.parse_args(argv)
+
+
+def main(argv=None):
+    args = parse_args(argv)
+
+    species_list = load_species(args.species)
     # A release counts as published once every core species is in it. Read that
-    # from the whole table, not the WP_SPECIES-filtered view: whether a release
-    # shipped does not depend on which subset this run was asked to build.
+    # from the whole table rather than the --species subset: whether a release
+    # shipped does not depend on which species this run was asked to build.
     core_tokens = {species["wp_token"]
-                   for species in load_species(apply_filter=False)
+                   for species in load_species()
                    if species["tier"] == "core"}
-    version, available = resolve_release(core_tokens)
+    version, available = resolve_release(core_tokens, pinned=args.version)
     template = pathlib.Path(CONFIG_TEMPLATE).read_text(encoding="utf-8")
 
     built = []
