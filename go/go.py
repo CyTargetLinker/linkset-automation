@@ -32,8 +32,13 @@ gene2go has no gene symbol, so the readable label comes from NCBI gene_info
 Entrez numbers. If a symbol is missing the Entrez ID is used as the label.
 
 gene2go has no release version, so VERSION is just a date stamp for the linkset
-name. To add species, append an entry to SPECIES (tax_id, code, gene_info_url)
-and add a matching go_<code>.config.
+name. The ontology does carry one: go-basic.obo's data-version header names the
+GO release (e.g. "releases/2026-05-19"). GO is CC BY 4.0 and its citation policy
+asks redistributed data to state the release it came from, so check_version()
+warns when VERSION has drifted from the ontology actually downloaded.
+
+To add species, append an entry to SPECIES (tax_id, code, gene_info_url) and add
+a matching go_<code>.config.
 """
 
 import csv
@@ -128,14 +133,17 @@ def load_symbols(url, tax):
 
 
 def parse_obo(path):
-    """Parse go-basic.obo into (parents, names, alt_ids).
+    """Parse go-basic.obo into (parents, names, alt_ids, data_version).
 
-    parents : {GO_id -> set(direct parent GO_ids)} over PROPAGATE_RELATIONS
-    names   : {GO_id -> term name}
-    alt_ids : {secondary GO_id -> primary GO_id}
+    parents      : {GO_id -> set(direct parent GO_ids)} over PROPAGATE_RELATIONS
+    names        : {GO_id -> term name}
+    alt_ids      : {secondary GO_id -> primary GO_id}
+    data_version : the ontology release from the OBO header (e.g.
+                   "releases/2026-05-19"), or None if the header lacks one.
     Obsolete terms are skipped.
     """
     parents, names, alt_ids = {}, {}, {}
+    data_version = None
     cur, par, alts, name, obsolete = None, set(), [], None, False
 
     def flush():
@@ -169,9 +177,13 @@ def parse_obo(path):
                     par.add(rel[1])
             elif line == "is_obsolete: true":
                 obsolete = True
+            elif cur is None and line.startswith("data-version: "):
+                # header stanza, before the first [Term]
+                data_version = line[len("data-version: "):].strip()
     flush()
     print(f"  parsed {len(names)} GO terms ({len(alt_ids)} alt ids)")
-    return parents, names, alt_ids
+    print(f"  GO release: {data_version or 'unknown'}")
+    return parents, names, alt_ids, data_version
 
 
 def build_ancestor_fn(parents):
@@ -202,10 +214,34 @@ def _merge(existing, value):
             existing.append(tok)
 
 
+def check_version(data_version):
+    """Warn when VERSION does not name the GO release actually downloaded.
+
+    GO is CC BY 4.0 and its citation policy asks that redistributed data state
+    the release it came from. VERSION is what the go_<code>_<aspect>.config
+    files record as the linkset version, so if it drifts from the ontology on
+    disk the deposit cites a release it was not built from. The configs are
+    static files, so correcting this is a manual edit — this only makes the
+    drift visible instead of silent.
+    """
+    if not data_version:
+        print("WARNING: go-basic.obo has no data-version header; "
+              f"cannot verify VERSION={VERSION}")
+        return
+    # data-version looks like "releases/2026-05-19"; VERSION like "20260601"
+    release = data_version.rsplit("/", 1)[-1].replace("-", "")
+    if release != VERSION:
+        print(f"WARNING: VERSION={VERSION} does not match the GO release "
+              f"actually downloaded ({data_version}). Update VERSION and the "
+              f"version= line in go/go_<code>_<aspect>.config to {release} "
+              "so the linkset cites the release it was built from.")
+
+
 def main():
     download(GENE2GO_URL, LOCAL)
     download(GO_OBO_URL, GO_OBO_LOCAL)
-    parents, names, alt_ids = parse_obo(GO_OBO_LOCAL)
+    parents, names, alt_ids, data_version = parse_obo(GO_OBO_LOCAL)
+    check_version(data_version)
     ancestors = build_ancestor_fn(parents)
 
     taxmap = {tax: code for tax, code, _ in SPECIES}
