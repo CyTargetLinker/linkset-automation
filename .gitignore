@@ -5,6 +5,8 @@ __pycache__/
 # Downloaded source data
 *.gmt
 *.gz
+*.tsv
+*.tsv.gz
 gene2go*
 *.obo
 
@@ -20,3 +22,9 @@ linkset-creator-*.jar
 input_*.txt
 *.xgmml
 *.log
+
+# Helper-script outputs (configGenerator.sh / download-bridgedb.sh)
+fileNames.config
+fileDownloads.config
+gdb.config
+other.json

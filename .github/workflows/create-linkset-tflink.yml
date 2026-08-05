@@ -1,0 +1,87 @@
+name: Create TFLink linksets
+
+on:
+  workflow_dispatch:
+
+jobs:
+  create-linksets:
+    runs-on: ubuntu-latest
+    steps:
+
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '11'
+
+      - name: Restore linkset-creator jar from cache
+        uses: actions/cache@v4
+        id: cache-jar
+        with:
+          path: ./linkset-creator-v2.0.jar
+          key: cached-linkset-creator-v2.0-jar
+
+      - name: Download linkset-creator jar if cache missed
+        if: steps.cache-jar.outputs.cache-hit != 'true'
+        run: |
+          wget -O linkset-creator-v2.0.jar \
+            https://github.com/CyTargetLinker/linksetCreator/releases/download/v2.0/linkset-creator-v2.0.jar
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+
+      - name: Install dependencies with pip
+        run: pip3 install pandas requests
+
+      - name: Run preprocessing (downloads TFLink data, writes input_<code>.txt)
+        run: python3 tflink/tflink.py
+
+      - name: Install jq
+        run: sudo apt-get install -y jq
+
+      - name: Download BridgeDb files (latest figshare URLs from bridgedb/data)
+        run: |
+          mkdir -p bridgedb
+          # gene.json in github.com/bridgedb/data holds the latest per-species .bridge URLs.
+          curl -sL "https://raw.githubusercontent.com/bridgedb/data/main/gene.json" -o gene.json
+          ua="Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+          # "organism (as named in gene.json)|CyTargetLinker short code used by the configs"
+          for entry in \
+            "Homo sapiens|hsa" \
+            "Mus musculus|mmu" \
+            "Rattus norvegicus|rno" \
+            "Drosophila melanogaster|dme" \
+            "Caenorhabditis elegans|cel" \
+            "Saccharomyces cerevisiae|sce"; do
+            org="${entry%|*}"; code="${entry#*|}"
+            url=$(jq -r --arg o "$org" '.mappingFiles[] | select(.species==$o) | .downloadURL' gene.json)
+            # figshare needs the ndownloader host + a browser UA/Referer
+            norm="${url/https:\/\/figshare.com\/ndownloader/https:\/\/ndownloader.figshare.com}"
+            echo "Downloading $code bridge ($org) from $norm"
+            wget --quiet --user-agent="$ua" --header="Referer: https://figshare.com/" \
+              -O "bridgedb/${code}.bridge" "$norm"
+            unzip -t "bridgedb/${code}.bridge" >/dev/null 2>&1 || { echo "BAD ZIP: ${code}.bridge"; exit 1; }
+          done
+          ls -la bridgedb/
+
+      - name: Create & QC one linkset per species
+        run: |
+          for code in hsa mmu rno dme cel sce; do
+            echo "=== $code ==="
+            java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
+              -c "tflink/tflink_${code}.config" \
+              -i "input_${code}.txt" \
+              -o "tflink_${code}.xgmml"
+            python3 scripts/qc_xgmml.py --min-nodes 1 --min-edges 1 \
+              --mapped-type gene --min-mapped-frac 0.9 "tflink_${code}.xgmml"
+          done
+          ls -la tflink_*.xgmml
+
+      - name: Upload linkset artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tflink-linksets
+          path: tflink_*.xgmml

@@ -28,6 +28,11 @@ individual versions have their own DOIs. For resources that are not yet
 deposited the license shown is that of the upstream source data, and the
 license of the eventual deposit still needs to be decided.
 
+## Sources
+- **WikiPathways** (`wikipathways/`) — pathway–gene linkset for human, mouse and rat. See `.github/workflows/create-linkset-wikipathways.yml`.
+- **Gene Ontology** (`go/`) — GO term → gene linkset for human, built from NCBI gene2go with experimental evidence codes only, split into one linkset per aspect (BP / MF / CC) and propagated up the ontology by the true-path rule. See `.github/workflows/create-linkset-go.yml`.
+- **TFLink** (`tflink/`) — transcription factor → target gene linkset built from TFLink's small-scale (high-confidence) `simpleFormat` files, for the 6 species that have such data (human, mouse, rat, fruit fly, *C. elegans*, yeast; zebrafish has no small-scale data). See `.github/workflows/create-linkset-tflink.yml`. Produces the `.xgmml` files as a workflow artifact (no upload step yet). TFLink is frozen at v1.0 (2022); bump `VERSION` in `tflink/tflink.py` when a new release appears. Set `CONFIDENCE = "LS"`/`"All"` to build large-scale variants instead (note: human large-scale is ~6.7M interactions).
+
 ## (Intended) Workflow
 1. Run the bridgeDb update script to update bridgeDb versions for all config files.
 2. Check the download link for the resource you want to update (check if an update is required) and copy it into the (data preprocessing) script
