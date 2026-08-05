@@ -26,16 +26,12 @@ permissions:
   contents: read
 
 env:
-  # One-time setup: TFLink has no Zenodo record yet. Create an initial
-  # deposition in the cytargetlinker community, publish it once by hand, then
-  # put its two IDs here. Until then the build and QC steps run normally and
-  # the publish steps are skipped with a notice.
-  ZENODO_DEPOSITION_ID: ""
+  ZENODO_DEPOSITION_ID: "21804829"
   # Concept (all-versions) record, used to read what is currently published.
-  ZENODO_CONCEPT_ID: ""
-  # Fraction of gene nodes that must gain BridgeDb cross-references. 0.9 was
-  # carried over from a human-only linkset; fly, worm and yeast may map less
-  # completely, so this is here to be tuned rather than buried in the QC call.
+  ZENODO_CONCEPT_ID: "21804828"
+  # Fraction of gene nodes that must gain BridgeDb cross-references. Measured
+  # coverage on the first full run was 97.8-99.3% across all five species, so
+  # this threshold has plenty of headroom.
   MIN_MAPPED_FRAC: "0.9"
 
 jobs:

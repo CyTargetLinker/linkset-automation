@@ -78,28 +78,26 @@ immutable, so a shrinking record is refused.
 The deposit version string is `<VERSION>-<CONFIDENCE>`, e.g. `v1.0-SS`, because
 the confidence level changes what the linkset contains.
 
-### One-time setup, still outstanding
+### Record
 
-TFLink has no Zenodo record yet, so `ZENODO_DEPOSITION_ID` and
-`ZENODO_CONCEPT_ID` are empty in the workflow `env:` block. Until they are set,
-every run builds and QCs normally and then skips the publish steps with a notice
-in the job summary — it does not fail.
+Bootstrapped on 2026-08-05; the IDs are set in the workflow `env:` block.
 
-To finish it:
+| | |
+| --- | --- |
+| Deposition | `21804829` |
+| Concept (all-versions) | `21804828` |
+| Concept DOI | `10.5281/zenodo.21804828` |
 
-1. Run the workflow with **`bootstrap_zenodo`** ticked. It builds and QCs as
-   usual, then creates a Zenodo deposition, uploads the six linksets and sets
-   the metadata — and stops. The draft is **not published**: minting a DOI is
-   irreversible, so the first public record is left for a human to check and
-   publish. The draft URL and both IDs are printed in the job summary.
-2. Review the draft on Zenodo and publish it.
-3. Put the two IDs from the job summary into `ZENODO_DEPOSITION_ID` and
-   `ZENODO_CONCEPT_ID` in the workflow `env:` block.
-4. Add the concept DOI to the resource table in the top-level `README.md`.
+**The first version is still an unpublished draft.** Minting a DOI is
+irreversible, so the initial public record was left for a human to review and
+publish: https://zenodo.org/deposit/21804829
 
-After that the workflow versions the record on its own, exactly as the
-WikiPathways one does. Bootstrap refuses to run once `ZENODO_DEPOSITION_ID` is
-set, so it cannot create a second record by accident.
+Once it is published, add the concept DOI to the resource table in the
+top-level `README.md`. Every later run then versions the record by itself,
+exactly as the WikiPathways one does.
+
+The `bootstrap_zenodo` input that created it refuses to run now that
+`ZENODO_DEPOSITION_ID` is set, so it cannot mint a second record by accident.
 
 ## BridgeDb downloads
 
