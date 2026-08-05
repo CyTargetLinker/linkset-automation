@@ -69,11 +69,27 @@ in the job summary — it does not fail.
 
 To finish it:
 
-1. Create a deposition on Zenodo in the `cytargetlinker` community and publish
-   it once by hand, so a concept DOI exists.
-2. Put the published record's ID in `ZENODO_DEPOSITION_ID` and its concept
-   (all-versions) ID in `ZENODO_CONCEPT_ID`.
-3. Add the concept DOI to the resource table in the top-level `README.md`.
+1. Run the workflow with **`bootstrap_zenodo`** ticked. It builds and QCs as
+   usual, then creates a Zenodo deposition, uploads the six linksets and sets
+   the metadata — and stops. The draft is **not published**: minting a DOI is
+   irreversible, so the first public record is left for a human to check and
+   publish. The draft URL and both IDs are printed in the job summary.
+2. Review the draft on Zenodo and publish it.
+3. Put the two IDs from the job summary into `ZENODO_DEPOSITION_ID` and
+   `ZENODO_CONCEPT_ID` in the workflow `env:` block.
+4. Add the concept DOI to the resource table in the top-level `README.md`.
 
 After that the workflow versions the record on its own, exactly as the
-WikiPathways one does.
+WikiPathways one does. Bootstrap refuses to run once `ZENODO_DEPOSITION_ID` is
+set, so it cannot create a second record by accident.
+
+## BridgeDb downloads
+
+Bridge files come through `scripts/fetch-bridge.sh`, not a plain `wget`.
+Figshare answers `HTTP 202 Accepted` with an empty body when it decides the
+caller is a browser, and since 202 is a success code a naive download writes a
+zero-byte file and carries on. The script accepts only an explicit 200 that
+passes a zip test.
+
+Each species' bridge file is deleted straight after its linkset is built —
+six of them do not fit on a runner alongside the outputs.
