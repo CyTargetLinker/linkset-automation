@@ -67,7 +67,7 @@ jobs:
           done
           ls -la bridgedb/
 
-      - name: Create Linkset XGMML files
+      - name: Create & QC one linkset per species
         run: |
           for code in hsa mmu rno dme cel sce; do
             echo "=== $code ==="
@@ -75,6 +75,8 @@ jobs:
               -c "tflink/tflink_${code}.config" \
               -i "input_${code}.txt" \
               -o "tflink_${code}.xgmml"
+            python3 scripts/qc_xgmml.py --min-nodes 1 --min-edges 1 \
+              --mapped-type gene --min-mapped-frac 0.9 "tflink_${code}.xgmml"
           done
           ls -la tflink_*.xgmml
 

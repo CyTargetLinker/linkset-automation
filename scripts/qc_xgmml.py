@@ -13,8 +13,15 @@ produced by the linkset-creator carries:
 By default an empty graph (0 nodes or 0 edges) FAILS; pass --allow-empty to
 permit it. --min-nodes / --min-edges add explicit thresholds.
 
+--mapped-type TYPE together with --min-mapped-frac F guards against a silent
+BridgeDb mapping failure: among nodes whose `type` att equals TYPE, it fails
+unless at least fraction F carry more than one identifier (i.e. got expanded to
+cross-references). A mapper that failed to load leaves every node with only its
+input id, which this catches while a non-empty `identifiers` list alone does not.
+
 Usage:
-    python3 qc_xgmml.py [--allow-empty] [--min-nodes N] [--min-edges N] FILE_OR_GLOB...
+    python3 qc_xgmml.py [--allow-empty] [--min-nodes N] [--min-edges N]
+                        [--mapped-type TYPE --min-mapped-frac F] FILE_OR_GLOB...
 
 Each positional argument is treated as a glob (literal paths work too).
 Exit code is 0 only if every matched file passes; 1 otherwise.
@@ -44,10 +51,13 @@ def _att_index(element):
     return by_name, atts
 
 
-def validate_file(path, allow_empty=False, min_nodes=0, min_edges=0):
+def validate_file(path, allow_empty=False, min_nodes=0, min_edges=0,
+                  mapped_type=None, min_mapped_frac=0.0):
     """Validate one XGMML file. Returns (errors, warnings, n_nodes, n_edges)."""
     errors = []
     warnings = []
+    mapped_total = 0   # nodes whose type == mapped_type
+    mapped_ok = 0      # ...of those, with >1 identifier (got cross-references)
 
     try:
         root = ET.parse(path).getroot()
@@ -81,14 +91,20 @@ def validate_file(path, allow_empty=False, min_nodes=0, min_edges=0):
 
         by_name, _ = _att_index(node)
         ident = by_name.get("identifiers")
+        n_ident = 0
         if ident is None:
             errors.append(f"node '{nid}' has no 'identifiers' attribute")
         else:
             values = [c for c in ident if _local(c.tag) == "att"]
+            n_ident = len(values)
             if not values:
                 errors.append(f"node '{nid}' has an empty 'identifiers' list")
         if "type" not in by_name:
             errors.append(f"node '{nid}' has no 'type' attribute")
+        elif mapped_type is not None and by_name["type"].get("value") == mapped_type:
+            mapped_total += 1
+            if n_ident > 1:
+                mapped_ok += 1
         if "label" not in by_name and node.get("label") is None:
             warnings.append(f"node '{nid}' has no 'label'")
 
@@ -123,6 +139,18 @@ def validate_file(path, allow_empty=False, min_nodes=0, min_edges=0):
     if n_edges < min_edges:
         errors.append(f"only {n_edges} edges (min-edges={min_edges})")
 
+    if mapped_type is not None and min_mapped_frac > 0.0:
+        if mapped_total == 0:
+            errors.append(f"no nodes of type '{mapped_type}' to check mapping coverage")
+        else:
+            frac = mapped_ok / mapped_total
+            if frac < min_mapped_frac:
+                errors.append(
+                    f"only {mapped_ok}/{mapped_total} ({frac:.1%}) '{mapped_type}' nodes "
+                    f"have cross-references (min-mapped-frac={min_mapped_frac:.0%}); "
+                    "BridgeDb mapping may have failed"
+                )
+
     return (errors, warnings, n_nodes, n_edges)
 
 
@@ -132,6 +160,10 @@ def main(argv=None):
     parser.add_argument("--allow-empty", action="store_true", help="treat empty graphs as a warning, not an error")
     parser.add_argument("--min-nodes", type=int, default=0, help="fail if fewer than this many nodes")
     parser.add_argument("--min-edges", type=int, default=0, help="fail if fewer than this many edges")
+    parser.add_argument("--mapped-type", default=None,
+                        help="node 'type' value to check BridgeDb mapping coverage for (e.g. gene)")
+    parser.add_argument("--min-mapped-frac", type=float, default=0.0,
+                        help="fail unless this fraction of --mapped-type nodes have >1 identifier")
     args = parser.parse_args(argv)
 
     files = []
@@ -148,7 +180,8 @@ def main(argv=None):
     failed = 0
     for path in files:
         errors, warnings, n_nodes, n_edges = validate_file(
-            path, allow_empty=args.allow_empty, min_nodes=args.min_nodes, min_edges=args.min_edges
+            path, allow_empty=args.allow_empty, min_nodes=args.min_nodes, min_edges=args.min_edges,
+            mapped_type=args.mapped_type, min_mapped_frac=args.min_mapped_frac
         )
         status = "PASS" if not errors else "FAIL"
         if errors:
