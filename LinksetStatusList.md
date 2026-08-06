@@ -74,27 +74,72 @@ Worth having, but not usable as downloaded.
 | Open Targets | target–disease | CC0 and quarterly, but 17M associations — needs a score threshold that can be defended | https://platform.opentargets.org/downloads |
 | miRTarBase | microRNA–target gene | the strong-evidence subset (reporter assay, Western blot), not the full 3.8M | https://awi.cuhk.edu.cn/miRTarBase/ |
 | TarBase | microRNA–target gene | CC BY 4.0, better licensed than miRTarBase; filter to the low-throughput methods | https://dianalab.e-ce.uth.gr/tarbasev9 |
+| TransmiR | transcription factor–microRNA | the literature-curated tier (~5k pairs), not the ChIP-seq or motif-predicted tiers | https://www.cuilab.cn/transmir |
 | AOP-Wiki | key event–gene | no gene table upstream; would be derived through the KE–WikiPathways mappings, and coverage is partial | https://aopwiki.org |
 
 ### Not worth a workflow
 
-Upstream no longer releases, so a scheduled build gains nothing over a one-off.
+These release rarely or not at all, so a scheduled build gains nothing over a
+one-off. Several are still worth having as a linkset; they just do not need
+automating.
 
-| Database | Last release |
-| --- | --- |
-| TRRUST | 2018 |
-| CollecTRI | 2023 |
-| CORUM | 2024 |
-| HuRI | 2020 |
-| SIDER | 2015 |
-| NCBI HomoloGene | retired 2024 |
+| Database | Interactions | Last release |
+| --- | --- | --- |
+| TRRUST | transcription factor–target | 2018 |
+| CollecTRI | transcription factor–target | 2023 |
+| CORUM | protein complex–component | 2024 |
+| HuRI | binary protein–protein | 2020 |
+| BioPlex | protein–protein, one cell line | 2021 |
+| SIDER | drug–side effect | 2015 |
+| NCBI HomoloGene | gene–ortholog | retired 2024 |
 
 ### Too large
 
-These would repeat the GO problem: STRING (usable only above a 0.9 cutoff),
-IntAct and BioGRID in full, RegNetwork (11M interactions), hTFtarget (3.2M),
-InterPro/Pfam domains, Rhea, CellMarker (~32 cell types per gene), and predicted
-microRNA targets such as miRDB and TargetScan (500–600 targets per microRNA).
+These would repeat the GO problem. The figure is what rules each one out.
+
+| Database | Interactions | Size |
+| --- | --- | --- |
+| GO, full | gene–term | removed at 226k edges, 183 MB |
+| STRING | functional association | usable only above a 0.9 cutoff |
+| IntAct, BioGRID | protein–protein | ~848k interactions in full; IntAct needs MI > 0.6 |
+| RegNetwork | transcription factor–target | 11M interactions |
+| hTFtarget | transcription factor–target | 3.2M regulations |
+| miRDB, TargetScan | predicted microRNA–target | 500–600 targets per microRNA |
+| CellMarker | cell type–marker gene | ~32 cell types per gene |
+| InterPro, Pfam | protein family–gene | several domains per gene |
+| Rhea | enzyme–reaction | several reactions per enzyme |
+
+### Assessed, not queued
+
+Looked at and not taken further, recorded so the assessment is not repeated.
+
+| Database | Interactions | Why not |
+| --- | --- | --- |
+| OmniPath | aggregated signalling | no single bulk file, and the license varies by contributing resource |
+| DGIdb | drug–gene | aggregates 44 sources under differing licenses, so provenance would have to be tracked per edge |
+| DrugCentral | drug–target | CC BY-SA and usable, but overlaps ChEMBL and Guide to PHARMACOLOGY |
+| Probes & Drugs | compound–target | aggregate; the license follows its sources |
+| PharmGKB | variant–drug | pharmacogenetic variants rather than drug–target |
+| ToxCast, Tox21 | chemical–assay | public domain, but assay-centric; no clean chemical–gene table without mapping work |
+| EPA CompTox | chemical properties | chemical library, no gene links |
+| eNanoMapper | nanomaterial properties | ontology, no gene links |
+| GWAS Catalog | trait–variant | the trait-to-gene step is a choice the source does not make |
+| ClinVar | gene–condition | `gene_condition_source_id` is bounded, but overlaps Orphanet and OMIM |
+| ClinGen | gene–disease validity | expert-curated and small, ~3.3k curations |
+| CIViC | variant–cancer evidence | CC0 and bounded, but variant-level and cancer-only |
+| MGI, RGD | gene–phenotype | mouse and rat phenotype; revisit if a non-human disease linkset is wanted |
+| Human Protein Atlas | gene–tissue, gene–cell type | CC BY 4.0, but needs the enriched classification rather than all expression calls |
+| Bgee | gene–anatomy | needs a tissue subset chosen first |
+| MSigDB Hallmark | gene–gene set | 50 sets and bounded, but MSigDB collections differ in license and not all are open |
+| GO slim | gene–term | the bounded alternative to the removed GO linkset; needs a slim chosen and its coverage checked |
+| PathBank, SMPDB | gene–pathway | CC BY 4.0, but overlaps WikiPathways and Reactome, and currency is unclear |
+| InnateDB | protein–protein | curated but narrow, innate immunity only |
+| PanglaoDB | cell type–marker gene | CC0, but currency unclear |
+| OrthoDB, eggNOG, OMA | gene–ortholog | alternatives to Ensembl Compara, but grouped rather than one-to-one, so they need collapsing first |
+| ChEA3, GTRD, miRNet | transcription factor, microRNA | web tools, no bulk interaction table |
+| JASPAR | binding motifs | motif profiles; targets come from scanning, not measurement |
+| SCENIC | inferred regulons | a method, not a database |
+| RNAcentral | ncRNA sequences | sequence reference, not interactions |
 
 ## License limitation
 
