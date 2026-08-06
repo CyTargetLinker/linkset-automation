@@ -1,6 +1,6 @@
 # ChEMBL mechanism-of-action linkset
 
-Compound → gene linkset for human, built from ChEMBL drug mechanism-of-action
+Compound → target linkset for human, built from ChEMBL compound's mechanism-of-action (MoA)
 records.
 
 | | |
@@ -37,6 +37,63 @@ Components are read one at a time rather than by zipping separate symbol and
 HGNC lists, which would misalign whenever a component has a symbol but no HGNC
 id.
 
+## Generated data
+
+The preprocessing script creates a tab-separated file named:
+
+```text
+input.txt
+```
+
+The file contains the following columns.
+
+## Compound attributes
+
+| Column | Description |
+| --- | --- |
+| `molecule_chembl_id` | ChEMBL molecule identifier |
+| `compound_name` | Preferred compound name |
+| `inchi_key` | Standard InChIKey |
+| `pubchem_sid` | First available PubChem substance identifier |
+| `max_phase` | Highest clinical development phase |
+| `molecule_type` | ChEMBL molecule type |
+| `parent_drug` | Parent ChEMBL molecule identifier |
+| `first_approval` | First approval year |
+| `indication_class` | Therapeutic or indication class |
+
+## Mechanism attributes
+
+| Column | Description |
+| --- | --- |
+| `mechanism_id` | ChEMBL mechanism identifier |
+| `mechanism_of_action` | Description of the mechanism of action |
+| `action_type` | Type of action, such as inhibitor or agonist |
+| `direct_interaction` | Whether a direct interaction is reported |
+| `molecular_mechanism` | Whether the record describes a molecular mechanism |
+| `disease_efficacy` | Whether disease efficacy is reported |
+| `selectivity_comment` | Selectivity information |
+| `binding_site_comment` | Binding-site information |
+
+## Target attributes
+
+| Column | Description |
+| --- | --- |
+| `target_chembl_id` | ChEMBL target identifier |
+| `target_name` | Preferred target name |
+| `target_type` | ChEMBL target type |
+| `target_organism` | Target organism |
+| `uniprot_accessions` | UniProt accession for the target component |
+| `gene_symbol` | Human gene symbol |
+| `hgnc_id` | HGNC identifier |
+
+## Reference attributes
+
+| Column | Description |
+| --- | --- |
+| `ref_id` | Identifier of the first mechanism reference |
+| `ref_type` | Reference type |
+| `ref_url` | Reference URL |
+| `row_end` | Placeholder used to prevent trailing empty columns from being removed by the Linkset Creator |
 ## Versioning
 
 The release is read from ChEMBL's `status.json` at run time and flows into the
