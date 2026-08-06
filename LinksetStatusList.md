@@ -36,10 +36,8 @@ yet and the deposit license is still undecided.
 
 Databases we would like to automate. No workflow yet.
 
-Two things rule a resource out. The first is size, measured as edges per gene
-rather than rows in the source: WikiPathways human is 40k edges (32 MB) and
-works. The second is shape, which is what an ontology has and a linkset does
-not. See below.
+Two things rule a resource out: too many edges per gene (WikiPathways human is
+40k edges and works), and ontology shape, below.
 
 ### Ready to build
 
@@ -52,11 +50,9 @@ human, measured from the current release.
 | Guide to PHARMACOLOGY | ligand–target | 17.5k pairs, 1.9k targets, 9.6k ligands | ODbL, contents CC BY-SA 4.0 | https://www.guidetopharmacology.org/DATA/interactions.csv |
 | Complex Portal | complex–component | 9.6k edges, 2.5k complexes | CC0 | https://ftp.ebi.ac.uk/pub/databases/intact/complex/current/complextab/ |
 
-SIGNOR is one TSV request per organism and carries an effect (up- or
-down-regulates) on every edge; it is the only directed, signed resource here.
-Guide to PHARMACOLOGY is share-alike, so its deposit cannot be CC BY. The
-Complex Portal ComplexTAB files hold the curated complexes only; the hu.MAP
-predicted set is not in them, and there is one file per taxon.
+SIGNOR is one TSV request per organism and the only signed, directed resource
+here. Guide to PHARMACOLOGY is share-alike, so its deposit cannot be CC BY.
+Complex Portal's ComplexTAB files are curated only, one per taxon.
 
 ### Needs a decision first
 
@@ -75,9 +71,8 @@ Worth having, but not usable as downloaded.
 
 ### Not worth a workflow
 
-These release rarely or not at all, so a scheduled build gains nothing over a
-one-off. Several are still worth having as a linkset; they just do not need
-automating.
+These release rarely or not at all, so a schedule gains nothing over a one-off.
+Still worth building by hand if wanted.
 
 | Database | Interactions | Last release |
 | --- | --- | --- |
@@ -90,8 +85,7 @@ automating.
 
 ### Too large
 
-These attach too many edges per gene to be useful for extension. The figure is
-what rules each one out.
+Too many edges per gene to be useful. The figure is what rules each one out.
 
 | Database | Interactions | Size |
 | --- | --- | --- |
@@ -105,24 +99,12 @@ what rules each one out.
 
 ### Ontologies
 
-Ontology-backed resources do not flatten into a linkset. Annotations obey the
-true-path rule, so a gene annotated to one term is annotated to every ancestor
-of that term, and each gene arrives carrying its whole branch up to the root.
-Dropping the ancestors fixes the degree but throws away the term-to-term
-relations, and that is where an ontology keeps its meaning. A linkset has no way
-to express those relations, so neither choice leaves anything useful. This, not
-the file size, is why the GO linkset was removed. A slim does not solve it
-either: its terms are sampled, so the relations are still lost, and genes reach
-the surviving terms by propagation, which turns the generic ones into hubs.
-
-The same structure is worth checking in anything hierarchical. Reactome pathways
-have one, which is why the pipeline reads `NCBI2Reactome.txt` and not
-`NCBI2Reactome_All_Levels.txt`: the same 11,788 human genes give 54k edges at a
-median of 2 pathways per gene from the lowest level, against 160k edges at a
-median of 7 and a maximum of 525 once every parent is counted. HPO behaves the
-same way, which is what the ~78 terms per gene in `genes_to_phenotype` are,
-while `genes_to_disease` escapes it because diseases are flat identifiers and
-not a tree. Bgee's anatomy terms come from UBERON and carry the same hierarchy.
+Annotations propagate up the tree, so a gene arrives carrying its whole branch.
+Dropping the ancestors instead loses the term-to-term relations, which a linkset
+cannot express anyway. That, not file size, is why the GO linkset went, and a
+slim does not fix it. Reactome shows the scale: the same 11,788 human genes give
+54k edges from `NCBI2Reactome.txt` and 160k from `_All_Levels`, which is why the
+pipeline reads the first. HPO and Bgee are the same shape.
 
 ### Assessed, not queued
 
