@@ -50,17 +50,12 @@ human, measured from the current release.
 | SIGNOR | signed, directed causal signalling | 19.6k edges, 6.4k proteins, median degree 2 | CC BY 4.0 | https://signor.uniroma2.it/getData.php?organism=9606 |
 | Guide to PHARMACOLOGY | ligand–target | 17.5k pairs, 1.9k targets, 9.6k ligands | ODbL, contents CC BY-SA 4.0 | https://www.guidetopharmacology.org/DATA/interactions.csv |
 | Complex Portal | complex–component | 9.6k edges, 2.5k complexes | CC0 | https://ftp.ebi.ac.uk/pub/databases/intact/complex/current/complextab/ |
-| Ensembl Compara | gene–ortholog | 15.8k one-to-one pairs for human–rat | open | https://ftp.ensembl.org/pub/current/tsv/ensembl-compara/homologies/ |
 
 SIGNOR is one TSV request per organism and carries an effect (up- or
 down-regulates) on every edge; it is the only directed, signed resource here.
 Guide to PHARMACOLOGY is share-alike, so its deposit cannot be CC BY. The
 Complex Portal ComplexTAB files hold the curated complexes only — the hu.MAP
-predicted set is not in them, and there is one file per taxon. Ensembl
-homologies are filtered to `homology_type == ortholog_one2one`, which holds the
-linkset to one edge per gene per species pair and lets a network built for one
-species extend into another; the filename carries the release number, so the
-release is resolved at run time as WikiPathways already does.
+predicted set is not in them, and there is one file per taxon.
 
 ### Needs a decision first
 
@@ -91,7 +86,6 @@ automating.
 | HuRI | binary protein–protein | 2020 |
 | BioPlex | protein–protein, one cell line | 2021 |
 | SIDER | drug–side effect | 2015 |
-| NCBI HomoloGene | gene–ortholog | retired 2024 |
 
 ### Too large
 
@@ -135,7 +129,7 @@ Looked at and not taken further, recorded so the assessment is not repeated.
 | PathBank, SMPDB | gene–pathway | CC BY 4.0, but overlaps WikiPathways and Reactome, and currency is unclear |
 | InnateDB | protein–protein | curated but narrow, innate immunity only |
 | PanglaoDB | cell type–marker gene | CC0, but currency unclear |
-| OrthoDB, eggNOG, OMA | gene–ortholog | alternatives to Ensembl Compara, but grouped rather than one-to-one, so they need collapsing first |
+| Ensembl Compara, OrthoDB, eggNOG, OMA, NCBI HomoloGene | gene–ortholog | homology linksets are not wanted. Ensembl one-to-one orthologs would be bounded and cheap to build (15.8k pairs for human–rat), so this is a scope decision rather than a technical one |
 | ChEA3, GTRD, miRNet | transcription factor, microRNA | web tools, no bulk interaction table |
 | JASPAR | binding motifs | motif profiles; targets come from scanning, not measurement |
 | SCENIC | inferred regulons | a method, not a database |
