@@ -13,38 +13,12 @@ records.
 
 ## How it works
 
-`CHEMBL_MoA.py` pulls human mechanism records and writes `input.txt`,
-`build/version.txt` and a generated `config/chembl_human_MoA.config`. Genes enter
-as HGNC accessions (`target_syscode_in=Hac`), are labelled with their gene
-symbol, and BridgeDb expands them to Entrez, Ensembl, HGNC and UniProt.
+`CHEMBL_MoA.py` pulls human mechanism records and writes `input.txt`. A ChEMBL target can also be a protein complex; each complex was split into multiple targets.
 
 ```bash
-python3 CHEMBL/CHEMBL_MoA.py                 # full build
-python3 CHEMBL/CHEMBL_MoA.py --limit 40      # smoke test, minutes not an hour
+python3 CHEMBL/CHEMBL_MoA.py                 # takes an hour
+python3 CHEMBL/CHEMBL_MoA.py --limit 40      # test run, takes minutes
 ```
-
-A full run takes about an hour in CI. The client caches responses, so a local
-re-run is much faster than the first one.
-
-## Targets
-
-A ChEMBL target may be a protein complex — the GABA-B receptor is GABBR1 plus
-GABBR2 — so each target component becomes its own compound → gene row. A row is
-therefore identified by `mechanism_id` **plus** the gene, not `mechanism_id`
-alone.
-
-Components are read one at a time rather than by zipping separate symbol and
-HGNC lists, which would misalign whenever a component has a symbol but no HGNC
-id.
-
-## Generated data
-
-The preprocessing script creates a tab-separated file named:
-
-```text
-input.txt
-```
-
 The file contains the following columns.
 
 ## Compound attributes
@@ -61,7 +35,7 @@ The file contains the following columns.
 | `first_approval` | First approval year |
 | `indication_class` | Therapeutic or indication class |
 
-## Mechanism attributes
+## Edge attributes
 
 | Column | Description |
 | --- | --- |
@@ -73,6 +47,10 @@ The file contains the following columns.
 | `disease_efficacy` | Whether disease efficacy is reported |
 | `selectivity_comment` | Selectivity information |
 | `binding_site_comment` | Binding-site information |
+| `ref_id` | Identifier of the first mechanism reference |
+| `ref_type` | Reference type |
+| `ref_url` | Reference URL |
+| `row_end` | Placeholder used to prevent trailing empty columns from being removed by the Linkset Creator |
 
 ## Target attributes
 
@@ -86,14 +64,6 @@ The file contains the following columns.
 | `gene_symbol` | Human gene symbol |
 | `hgnc_id` | HGNC identifier |
 
-## Reference attributes
-
-| Column | Description |
-| --- | --- |
-| `ref_id` | Identifier of the first mechanism reference |
-| `ref_type` | Reference type |
-| `ref_url` | Reference URL |
-| `row_end` | Placeholder used to prevent trailing empty columns from being removed by the Linkset Creator |
 ## Versioning
 
 The release is read from ChEMBL's `status.json` at run time and flows into the
@@ -103,4 +73,4 @@ and is gitignored — do not hand-edit it.
 
 ## Release
 
-Not yet deposited, and the deposit license is still undecided.
+Not yet deposited.
