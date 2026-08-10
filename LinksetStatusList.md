@@ -12,32 +12,29 @@ Deposit details, meaning persistent DOIs, licenses and per-resource build
 notes, live in the resource table in [`README.md`](README.md#linkset-resources)
 rather than being repeated here.
 
-## In production
+## Complete automation
 
-The workflow runs green and the output is deposited under a persistent DOI.
-
-| Resource | Interactions | Workflow |
-| --- | --- | --- |
-| [WikiPathways](https://www.wikipathways.org) | pathway–gene, 13 species | [`create-linkset-wikipathways.yml`](.github/workflows/create-linkset-wikipathways.yml) |
-| [TFLink](https://tflink.net) | transcription factor–target gene, 5 species | [`create-linkset-tflink.yml`](.github/workflows/create-linkset-tflink.yml) |
+| Resource | Interactions | Workflow | Deposit | Lastest version
+| --- | --- | --- | --- | --- |
+| [WikiPathways](https://www.wikipathways.org) | pathway–gene, 13 species | [`create-linkset-wikipathways.yml`](.github/workflows/create-linkset-wikipathways.yml) | [WikiPathways Linksets](https://zenodo.org/records/21806899) | Version 20260710 |
+| [TFLink](https://tflink.net) | transcription factor–target gene, 5 species | [`create-linkset-tflink.yml`](.github/workflows/create-linkset-tflink.yml) | [TFLink Linksets](https://zenodo.org/records/21804829) | Version v1.0-SS |
 
 ## Automated, not yet deposited
 
-The workflow exists and the linkset builds, but nothing is published under a DOI
-yet and the deposit license is still undecided.
+The linkset generation is complete, but not yet deposited on Zenodo.
 
 | Resource | Interactions | Workflow | Outstanding |
 | --- | --- | --- | --- |
-| [Orphanet](https://www.orphadata.com/) | gene–rare disease | [`Create_OrphanetLinkset.yml`](.github/workflows/Create_OrphanetLinkset.yml) | Zenodo deposit; [`Orphanet/readme.md`](Orphanet/readme.md) is still a placeholder |
-| [ChEMBL](https://www.ebi.ac.uk/chembl/) | compound–protein target (mechanism of action) | [`Chembl_MoA.yml`](.github/workflows/Chembl_MoA.yml) | Zenodo deposit |
+| [Orphanet](https://www.orphadata.com/) | gene–rare disease | [`Create_OrphanetLinkset.yml`](.github/workflows/Create_OrphanetLinkset.yml) | [`Orphanet/readme.md`](Orphanet/readme.md) |
+| [ChEMBL](https://www.ebi.ac.uk/chembl/) | compound–protein target (mechanism of action) | [`Chembl_MoA.yml`](.github/workflows/Chembl_MoA.yml) | [`CHEMBL/readme.md`](CHEMBL/readme.md) |
 | [Reactome](https://reactome.org/) | pathway–gene, human | [`create-linkset-reactome.yml`](.github/workflows/create-linkset-reactome.yml) | Zenodo bootstrap; whether orthology-inferred species should ship |
 
 ## Candidates
 
-Databases we would like to automate. No workflow yet.
-
-Two things rule a resource out: too many edges per gene (WikiPathways human is
-40k edges and works), and ontology shape, below.
+Databases we would develop automation. The consideration includes:
+1. Regular updates from the database;
+2. Open-licensed resources;
+3. Data quality.
 
 ### Ready to build
 
@@ -76,6 +73,7 @@ Still worth building by hand if wanted.
 
 | Database | Interactions | Last release |
 | --- | --- | --- |
+
 | TRRUST | transcription factor–target | 2018 |
 | CollecTRI | transcription factor–target | 2023 |
 | CORUM | protein complex–component | 2024 |
