@@ -1,8 +1,6 @@
 # Orphanet Rare Disease–Gene Linkset
 
 This directory contains the preprocessing code and configuration used to generate the **Orphanet rare disease–gene linkset** for [CyTargetLinker](https://cytargetlinker.github.io/).
-Compound → gene linkset for human, built from ChEMBL drug mechanism-of-action
-records.
 
 | | |
 | --- | --- |
@@ -11,6 +9,7 @@ records.
 | DOI | not yet deposited |
 | Workflow | [Orphanet workflow](https://github.com/CyTargetLinker/linkset-automation/blob/main/.github/workflows/Create_OrphanetLinkset.yml) |
 | Species | human |
+
 
 
 ## Contents
