@@ -1,6 +1,6 @@
 # ChEMBL mechanism-of-action linkset
 
-Compound → target linkset for human, built from ChEMBL compound's mechanism-of-action (MoA)
+Compound → target linkset for human, built from ChEMBL compounds' mechanism-of-action (MoA)
 records.
 
 | | |
