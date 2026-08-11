@@ -72,7 +72,7 @@ These release rarely or not at all, so a schedule gains nothing over a one-off.
 Still worth building by hand if wanted.
 
 | Database | Interactions | Last release |
-| --- | --- | --- |
+| --- | --- | --- |--- |
 
 | TRRUST | transcription factor–target | 2018 |
 | CollecTRI | transcription factor–target | 2023 |
