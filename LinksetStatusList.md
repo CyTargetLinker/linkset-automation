@@ -28,6 +28,7 @@ The linkset generation is complete, but not yet deposited on Zenodo.
 | [Orphanet](https://www.orphadata.com/) | gene–rare disease | [`Create_OrphanetLinkset.yml`](.github/workflows/Create_OrphanetLinkset.yml) | [`Orphanet/readme.md`](Orphanet/readme.md) |
 | [ChEMBL](https://www.ebi.ac.uk/chembl/) | compound–protein target (mechanism of action) | [`Chembl_MoA.yml`](.github/workflows/Chembl_MoA.yml) | [`CHEMBL/readme.md`](CHEMBL/readme.md) |
 | [Reactome](https://reactome.org/) | pathway–gene, human | [`create-linkset-reactome.yml`](.github/workflows/create-linkset-reactome.yml) | Zenodo bootstrap; whether orthology-inferred species should ship |
+| [SIGNOR](https://signor.uniroma2.it/) | protein–protein and chemical–protein causal signalling, human | [`create-linkset-signor.yml`](.github/workflows/create-linkset-signor.yml) | Zenodo bootstrap |
 
 ## Candidates
 
@@ -43,12 +44,10 @@ human, measured from the current release.
 
 | Database | Interactions | Size | License | Source |
 | --- | --- | --- | --- | --- |
-| SIGNOR | signed, directed causal signalling | 19.6k edges, 6.4k proteins, median degree 2 | CC BY 4.0 | https://signor.uniroma2.it/getData.php?organism=9606 |
 | Guide to PHARMACOLOGY | ligand–target | 17.5k pairs, 1.9k targets, 9.6k ligands | ODbL, contents CC BY-SA 4.0 | https://www.guidetopharmacology.org/DATA/interactions.csv |
 | Complex Portal | complex–component | 9.6k edges, 2.5k complexes | CC0 | https://ftp.ebi.ac.uk/pub/databases/intact/complex/current/complextab/ |
 
-SIGNOR is one TSV request per organism and the only signed, directed resource
-here. Guide to PHARMACOLOGY is share-alike, so its deposit cannot be CC BY.
+Guide to PHARMACOLOGY is share-alike, so its deposit cannot be CC BY.
 Complex Portal's ComplexTAB files are curated only, one per taxon.
 
 ### Needs a decision first

@@ -158,8 +158,7 @@ jobs:
       # species together, so folding it in would force any consumer that wants a
       # single species to restore it as well. Its filename carries a release
       # date (metabolites_YYYYMMDD.bridge), which is the fingerprint it is keyed
-      # on. Nothing restores it yet — no config in the repo maps metabolites —
-      # so it is groundwork for a metabolite linkset.
+      # on. The SIGNOR workflow restores it for its chemical linkset.
       - name: Resolve the metabolite mapping file
         id: metab
         run: |
