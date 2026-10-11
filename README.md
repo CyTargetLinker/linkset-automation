@@ -6,6 +6,7 @@
 [![Orphanet linkset](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/Create_OrphanetLinkset.yml?label=Orphanet%20linkset)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/Create_OrphanetLinkset.yml)
 [![Reactome linkset](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/create-linkset-reactome.yml?label=Reactome%20linkset)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/create-linkset-reactome.yml)
 [![SIGNOR linkset](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/create-linkset-signor.yml?label=SIGNOR%20linkset)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/create-linkset-signor.yml)
+[![AOP-Wiki linksets](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/create-linkset-aopwiki.yml?label=AOP-Wiki%20linksets)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/create-linkset-aopwiki.yml)
 [![QC XGMML](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/qc-xgmml.yml?label=QC%20XGMML)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/qc-xgmml.yml)
 [![BridgeDb cache](https://img.shields.io/github/actions/workflow/status/CyTargetLinker/linkset-automation/update-bridgedb.yml?label=BridgeDb%20cache)](https://github.com/CyTargetLinker/linkset-automation/actions/workflows/update-bridgedb.yml)
 
@@ -29,6 +30,7 @@ got, and which databases are still candidates for automation.
 | [Orphanet](https://www.orphadata.com/) (human) | [`Orphanet/`](Orphanet/readme.md) | not yet deposited | CC BY 4.0 |
 | [Reactome](https://reactome.org/) (human) | [`reactome/`](reactome/readme.md) | not yet deposited | CC0 1.0 |
 | [SIGNOR](https://signor.uniroma2.it/) (human) | [`signor/`](signor/readme.md) | not yet deposited | CC BY 4.0 |
+| [AOP-Wiki](https://aopwiki.org/) (key event–gene, stressor–MIE) | [`aopwiki/`](aopwiki/readme.md) | not yet deposited | CC BY-SA 4.0 |
 
 Each resource name links to its upstream source, and the Details column links to
 that resource's own readme — how it is built, how to update it to a new release,

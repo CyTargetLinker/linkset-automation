@@ -28,6 +28,7 @@ The linkset generation is complete, but not yet deposited on Zenodo.
 | [Orphanet](https://www.orphadata.com/) | gene–rare disease | [`Create_OrphanetLinkset.yml`](.github/workflows/Create_OrphanetLinkset.yml) | [`Orphanet/readme.md`](Orphanet/readme.md) |
 | [ChEMBL](https://www.ebi.ac.uk/chembl/) | compound–protein target (mechanism of action) | [`Chembl_MoA.yml`](.github/workflows/Chembl_MoA.yml) | [`CHEMBL/readme.md`](CHEMBL/readme.md) |
 | [Reactome](https://reactome.org/) | pathway–gene, human | [`create-linkset-reactome.yml`](.github/workflows/create-linkset-reactome.yml) | Zenodo bootstrap; whether orthology-inferred species should ship |
+| [AOP-Wiki](https://aopwiki.org/) | key event–gene (text-mined), chemical stressor–molecular initiating event | [`create-linkset-aopwiki.yml`](.github/workflows/create-linkset-aopwiki.yml) | Zenodo bootstrap |
 | [SIGNOR](https://signor.uniroma2.it/) | protein–protein causal signalling, human | [`create-linkset-signor.yml`](.github/workflows/create-linkset-signor.yml) | Zenodo bootstrap; chemical–protein waits on [linksetCreator#5](https://github.com/CyTargetLinker/linksetCreator/issues/5) |
 
 ## Candidates
@@ -63,7 +64,6 @@ Worth having, but not usable as downloaded.
 | miRTarBase | microRNA–target gene | the strong-evidence subset (reporter assay, Western blot), not the full 3.8M | https://awi.cuhk.edu.cn/miRTarBase/ |
 | TarBase | microRNA–target gene | CC BY 4.0, better licensed than miRTarBase; filter to the low-throughput methods | https://dianalab.e-ce.uth.gr/tarbasev9 |
 | TransmiR | transcription factor–microRNA | the literature-curated tier (~5k pairs), not the ChIP-seq or motif-predicted tiers | https://www.cuilab.cn/transmir |
-| AOP-Wiki | key event–gene | no gene table upstream; would be derived through the KE–WikiPathways mappings, and coverage is partial | https://aopwiki.org |
 
 ### Not worth a workflow
 
