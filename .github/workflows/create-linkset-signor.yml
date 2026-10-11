@@ -74,8 +74,8 @@ jobs:
       - name: Install dependencies
         run: pip3 install requests
 
-      # Resolves the SIGNOR release, writes input_signor_{protein,chemical}.txt
-      # and the generated signor/config/signor_{protein,chemical}.config.
+      # Resolves the SIGNOR release, writes input_signor_protein.txt and the
+      # generated signor/config/signor_protein.config.
       - name: Preprocess the SIGNOR human network
         # Inputs are passed through the environment rather than interpolated
         # into the script, so their contents cannot be executed as shell.
@@ -90,7 +90,7 @@ jobs:
           python3 signor/signor.py ${args[@]+"${args[@]}"}
           echo "SIGNOR_RELEASE=$(cat build/version.txt)" >> "$GITHUB_ENV"
 
-      # Restore-only: update-bridgedb owns both caches. On a hit fetch-bridge.sh
+      # Restore-only: update-bridgedb owns this cache. On a hit fetch-bridge.sh
       # finds the file already present and valid and returns immediately; on a
       # miss it downloads it.
       - name: Restore the BridgeDb bundle
@@ -100,45 +100,24 @@ jobs:
           key: bridgedb-bundle-none
           restore-keys: bridgedb-bundle-
 
-      - name: Restore the metabolite mapping file
-        uses: actions/cache/restore@v6
-        with:
-          path: bridgedb-metabolites
-          key: bridgedb-metabolites-none
-          restore-keys: bridgedb-metabolites-
-
       - name: Build linksets
         run: |
           set -euo pipefail
-          mkdir -p bridgedb bridgedb-metabolites
+          mkdir -p bridgedb
           curl -sSL --retry 5 --retry-delay 5 \
             "https://raw.githubusercontent.com/bridgedb/data/main/gene.json" -o gene.json
-          curl -sSL --retry 5 --retry-delay 5 \
-            "https://raw.githubusercontent.com/bridgedb/data/main/other.json" -o other.json
-
-          # Keep only what this build reads, so the rest of the restored bundle
-          # does not sit on the runner's disk next to the 2.8 GB metabolite file.
-          find bridgedb -name '*.bridge' ! -name 'hsa.bridge' -delete
 
           hsa_url=$(jq -r '.mappingFiles[] | select(.species=="Homo sapiens") | .downloadURL' gene.json)
-          metab_url=$(jq -r '.mappingFiles[] | select(.type=="Metabolites") | .downloadURL' other.json)
-          for u in "$hsa_url" "$metab_url"; do
-            if [ -z "$u" ] || [ "$u" = "null" ]; then
-              echo "ERROR: could not resolve a BridgeDb download URL"
-              exit 1
-            fi
-          done
+          if [ -z "$hsa_url" ] || [ "$hsa_url" = "null" ]; then
+            echo "ERROR: no BridgeDb mapping file for 'Homo sapiens' in gene.json"
+            exit 1
+          fi
           scripts/fetch-bridge.sh "$hsa_url" "bridgedb/hsa.bridge"
-          scripts/fetch-bridge.sh "$metab_url" "bridgedb-metabolites/metabolites.bridge"
 
           java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
             -c signor/config/signor_protein.config \
             -i input_signor_protein.txt \
             -o signor_hsa.xgmml
-          java -jar -Dfile.encoding="UTF-8" linkset-creator-v2.0.jar \
-            -c signor/config/signor_chemical.config \
-            -i input_signor_chemical.txt \
-            -o signor_hsa_chemical.xgmml
           ls -la signor_*.xgmml
 
       # Any failure here fails the whole run and nothing is published: a partial
@@ -151,15 +130,6 @@ jobs:
             --mapped-type gene --min-mapped-frac 0.9 \
             --labelled-type gene \
             signor_hsa.xgmml
-          python3 scripts/qc_xgmml.py \
-            --min-nodes 1 --min-edges 1 \
-            --mapped-type "chemical compound" --min-mapped-frac 0.8 \
-            signor_hsa_chemical.xgmml
-          # The targets are proteins, mapped through the human bundle like the
-          # protein linkset.
-          python3 scripts/qc_xgmml.py \
-            --mapped-type gene --min-mapped-frac 0.9 \
-            signor_hsa_chemical.xgmml
 
       - name: Upload linkset artifacts
         uses: actions/upload-artifact@v7

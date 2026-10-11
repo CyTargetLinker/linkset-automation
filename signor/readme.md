@@ -1,6 +1,6 @@
 # SIGNOR linkset
 
-Causal signalling linksets for human, built from SIGNOR.
+Protein → protein causal signalling linkset for human, built from SIGNOR.
 
 | | |
 | --- | --- |
@@ -12,25 +12,29 @@ Causal signalling linksets for human, built from SIGNOR.
 
 ## How it works
 
-`signor.py` downloads SIGNOR's human network and writes two inputs, each with a
-config generated into `config/`:
-
-| Linkset | Rows kept | Source ids | Target ids |
-| --- | --- | --- | --- |
-| `signor_hsa.xgmml` | UniProt → UniProt | UniProt, syscode `S`, human bundle | UniProt, syscode `S`, human bundle |
-| `signor_hsa_chemical.xgmml` | ChEBI → UniProt | ChEBI, syscode `Ce`, metabolite bundle | UniProt, syscode `S`, human bundle |
-
-They are separate files because linkset-creator fixes the node type, input
-syscode and BridgeDb file per side of a config, so proteins and chemicals cannot
-share a side.
+`signor.py` downloads SIGNOR's human network, keeps the UniProt → UniProt rows,
+and writes `input_signor_protein.txt` plus a config generated into `config/`.
+Both ends enter as UniProt (syscode `S`) and BridgeDb expands them to Ensembl,
+Entrez and HGNC through the human bundle.
 
 ```bash
 python3 signor/signor.py
 python3 signor/signor.py --version 2026-10      # override the version label only
 ```
 
-October 2026: 19,636 protein edges (99.3% of protein nodes mapped) and 2,149
-chemical edges.
+October 2026: 19,636 protein edges, 99.3% of nodes mapped.
+
+## Chemicals
+
+A ChEBI chemical → protein linkset (2,149 edges in October 2026) is written by
+the same code but switched off in `LINKSETS`. It needs the BridgeDb metabolite
+database, which linkset-creator v2.0 cannot open: its 2015 BridgeDb libraries
+fail on connect with `No DataSource known for Cks` and write an empty linkset
+([linksetCreator#5](https://github.com/CyTargetLinker/linksetCreator/issues/5)).
+`signor_chemical.config.template` is ready for when a newer jar exists. A
+separate linkset is needed because linkset-creator fixes the node type, input
+syscode and BridgeDb file per side of a config, so proteins and chemicals cannot
+share a side.
 
 ## Input
 
@@ -38,7 +42,9 @@ SIGNOR records one row per piece of evidence, so a pair often has several rows
 with different effects, mechanisms or PMIDs. They are collapsed to one edge per
 (source, target), joining the effects, mechanisms, PMIDs and SIGNOR ids. One
 edge per pair is not a choice: linkset-creator keeps only the first row it sees
-for a pair. The `sign` column is `+`, `-`, `+;-` when the rows disagree, or empty
+for a pair, and it also drops A → B when B → A came first
+([linksetCreator#4](https://github.com/CyTargetLinker/linksetCreator/issues/4)).
+The `sign` column is `+`, `-`, `+;-` when the rows disagree, or empty
 when no effect is signed.
 
 UniProt isoform and processed-chain suffixes (`P05771-2`, `P01019-PRO_0000032457`)
@@ -48,8 +54,7 @@ Rows are not filtered on `TAX_ID`. That column is the species the experiment was
 done in, not the species of the proteins, and the human file holds thousands of
 rows on human proteins tagged `-1` or `10090`.
 
-Left out: protein → chemical rows (mostly enzyme → metabolite), chemicals that
-have only a PubChem id, antibodies, and every complex, protein family,
+Left out: chemicals (see above), antibodies, and every complex, protein family,
 phenotype, stimulus and microRNA, which carry SIGNOR-internal ids BridgeDb
 cannot map.
 

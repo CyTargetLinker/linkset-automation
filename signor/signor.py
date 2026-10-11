@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """Preprocess SIGNOR's human causal network into linkset-creator input files.
 
-Writes two linkset inputs, because linkset-creator fixes the node type, input
-syscode and BridgeDb file per side of a config, so proteins and chemicals cannot
-share a side:
+Writes one linkset input per entry in LINKSETS, each with its own config,
+because linkset-creator fixes the node type, input syscode and BridgeDb file per
+side of a config, so proteins and chemicals cannot share a side:
 
     input_signor_protein.txt                    protein -> protein
-    input_signor_chemical.txt                   ChEBI chemical -> protein
-    signor/config/signor_{protein,chemical}.config
+    signor/config/signor_protein.config
 
-plus build/version.txt.
+plus build/version.txt. A ChEBI chemical -> protein linkset is written but
+switched off; see LINKSETS.
 
 Content comes from getData.php?organism=9606, which is the live database sliced
 to human proteins. It is not filtered on TAX_ID: that column is the species the
@@ -60,7 +60,11 @@ COLUMNS = [
 # floor means the download or the column layout changed, not that SIGNOR shrank.
 LINKSETS = [
     ("protein", "UNIPROT", "UNIPROT", 10000),
-    ("chemical", "ChEBI", "UNIPROT", 1000),
+    # Off until linkset-creator can open the current BridgeDb metabolite
+    # database: its 2015 BridgeDb libraries fail on connect with "No DataSource
+    # known for Cks" and write an empty linkset (CyTargetLinker/linksetCreator#5).
+    # signor_chemical.config.template is ready for it.
+    # ("chemical", "ChEBI", "UNIPROT", 1000),
 ]
 
 INPUT_COLUMNS = [

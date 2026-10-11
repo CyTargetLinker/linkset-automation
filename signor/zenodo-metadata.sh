@@ -11,8 +11,8 @@ set -euo pipefail
 version="${1:?usage: zenodo-metadata.sh <version>}"
 
 description="<p>This dataset contains linkset networks of causal interactions from the SIGNOR ${version} release, in XGMML format, for human.</p>\
-<p>signor_hsa.xgmml holds protein to protein regulation and signor_hsa_chemical.xgmml holds ChEBI chemical to protein regulation. Each edge is one source and target pair, carrying the SIGNOR effects, a sign (+, - or +;- where the evidence disagrees), the mechanisms, whether the interaction is direct, and the supporting PMIDs and SIGNOR ids.</p>\
-<p>Proteins carry UniProt accessions expanded to their BridgeDb cross-references (Ensembl, Entrez Gene, HGNC); chemicals carry ChEBI ids expanded through the BridgeDb metabolite mapping. Complexes, protein families, phenotypes, stimuli and microRNAs are not included, since they cannot be matched to a network through BridgeDb.</p>\
+<p>signor_hsa.xgmml holds protein to protein regulation. Each edge is one source and target pair, carrying the SIGNOR effects, a sign (+, - or +;- where the evidence disagrees), the mechanisms, whether the interaction is direct, and the supporting PMIDs and SIGNOR ids.</p>\
+<p>Proteins carry UniProt accessions expanded to their BridgeDb cross-references (Ensembl, Entrez Gene, HGNC). Chemicals, complexes, protein families, phenotypes, stimuli and microRNAs are not included.</p>\
 <p>SIGNOR data is distributed under CC BY 4.0.</p>"
 
 jq -n \

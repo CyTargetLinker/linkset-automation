@@ -158,7 +158,9 @@ jobs:
       # species together, so folding it in would force any consumer that wants a
       # single species to restore it as well. Its filename carries a release
       # date (metabolites_YYYYMMDD.bridge), which is the fingerprint it is keyed
-      # on. The SIGNOR workflow restores it for its chemical linkset.
+      # on. Nothing restores it yet: linkset-creator v2.0 cannot open the
+      # current metabolite database (CyTargetLinker/linksetCreator#5), so it is
+      # groundwork for SIGNOR's chemical linkset and any metabolite linkset.
       - name: Resolve the metabolite mapping file
         id: metab
         run: |
