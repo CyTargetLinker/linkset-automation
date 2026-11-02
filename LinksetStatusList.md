@@ -48,14 +48,13 @@ human, measured from the current release.
 | OpenTargets | gene_disease_drug | Every three month on 26th |  [`CC0 1.0`](https://creativecommons.org/publicdomain/zero/1.0/?ref=chooser-v1)  | https://www.guidetopharmacology.org/DATA/interactions.csv |
 
 
-### Needs a decision first
+### Create but not update
 
 Worth having, but not automation needed for regular updating is not clear.
 
-| Database | Interactions | Decision | Source |
+| Database | Interactions | License| Source |
 | --- | --- | --- | --- |
-| DISEASES | disease–gene | confidence cutoff for the text-mining channel; the knowledge and experiments channels are bounded as they are | https://diseases.jensenlab.org/Downloads |
-
+| CollecTRI | transcription factor–gene | freely available | https://diseases.jensenlab.org/Downloads |
 
 
 ## License limitation
