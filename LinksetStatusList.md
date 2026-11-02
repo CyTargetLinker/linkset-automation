@@ -26,10 +26,10 @@ The linkset generation is complete, but not yet deposited on Zenodo.
 | Resource | Interactions | Workflow | Outstanding | Lastest version | License | 
 | --- | --- | --- | --- | --- |--- |
 | [Orphanet](https://www.orphadata.com/) | gene–rare disease | [`Create_OrphanetLinkset.yml`](.github/workflows/Create_OrphanetLinkset.yml) | [`Orphanet/readme.md`](Orphanet/readme.md) | July 2026 | [`CC BY 4.0`](https://creativecommons.org/licenses/by/4.0/deed.en) |
-| [ChEMBL](https://www.ebi.ac.uk/chembl/) | compound–protein target (mechanism of action) | [`Chembl_MoA.yml`](.github/workflows/Chembl_MoA.yml) | [`CHEMBL/readme.md`](CHEMBL/readme.md) | 2026 | [`CC0`](https://creativecommons.org/2008/04/16/cc0-betadiscussion-draft-2/) | 
-| [Reactome](https://reactome.org/) | pathway–gene, human | [`create-linkset-reactome.yml`](.github/workflows/create-linkset-reactome.yml) | Zenodo bootstrap; whether orthology-inferred species should ship |
-| [AOP-Wiki](https://aopwiki.org/) | key event–gene (text-mined), chemical stressor–molecular initiating event | [`create-linkset-aopwiki.yml`](.github/workflows/create-linkset-aopwiki.yml) | Zenodo bootstrap |
-| [SIGNOR](https://signor.uniroma2.it/) | protein–protein causal signalling, human | [`create-linkset-signor.yml`](.github/workflows/create-linkset-signor.yml) | Zenodo bootstrap; chemical–protein waits on [linksetCreator#5](https://github.com/CyTargetLinker/linksetCreator/issues/5) |
+| [ChEMBL](https://www.ebi.ac.uk/chembl/) | compound–protein target (mechanism of action) | [`Chembl_MoA.yml`](.github/workflows/Chembl_MoA.yml) | [`CHEMBL/readme.md`](CHEMBL/readme.md) | August 2026 | [`CC0`](https://creativecommons.org/2008/04/16/cc0-betadiscussion-draft-2/) | 
+| [Reactome](https://reactome.org/) | pathway–gene, human | [`create-linkset-reactome.yml`](.github/workflows/create-linkset-reactome.yml) | Zenodo bootstrap; whether orthology-inferred species should ship |  Na | [`CC BY 4.0`](https://creativecommons.org/licenses/by/4.0/deed.en) |
+| [AOP-Wiki](https://aopwiki.org/) | key event–gene (text-mined), chemical stressor–molecular initiating event | [`create-linkset-aopwiki.yml`](.github/workflows/create-linkset-aopwiki.yml) | Zenodo bootstrap |  Na| [`CC BY-SA`](https://creativecommons.org/licenses/by-sa/2.0/)
+| [SIGNOR](https://signor.uniroma2.it/) | protein–protein causal signalling, human | [`create-linkset-signor.yml`](.github/workflows/create-linkset-signor.yml) | Zenodo bootstrap; chemical–protein waits on [linksetCreator#5](https://github.com/CyTargetLinker/linksetCreator/issues/5) | Na | Na |
 
 ## Candidates
 
@@ -43,97 +43,20 @@ Databases we would develop automation. The consideration includes:
 Openly licensed, still curated upstream, and bounded as downloaded. Counts are
 human, measured from the current release.
 
-| Database | Interactions | Size | License | Source |
+| Database | Interactions | update frequency | License | Source |
 | --- | --- | --- | --- | --- |
-| Guide to PHARMACOLOGY | ligand–target | 17.5k pairs, 1.9k targets, 9.6k ligands | ODbL, contents CC BY-SA 4.0 | https://www.guidetopharmacology.org/DATA/interactions.csv |
-| Complex Portal | complex–component | 9.6k edges, 2.5k complexes | CC0 | https://ftp.ebi.ac.uk/pub/databases/intact/complex/current/complextab/ |
+| OpenTargets | gene_disease_drug | Every three month on 26th |  [`CC0 1.0`](https://creativecommons.org/publicdomain/zero/1.0/?ref=chooser-v1)  | https://www.guidetopharmacology.org/DATA/interactions.csv |
 
-Guide to PHARMACOLOGY is share-alike, so its deposit cannot be CC BY.
-Complex Portal's ComplexTAB files are curated only, one per taxon.
 
 ### Needs a decision first
 
-Worth having, but not usable as downloaded.
+Worth having, but not automation needed for regular updating is not clear.
 
 | Database | Interactions | Decision | Source |
 | --- | --- | --- | --- |
-| HPO | gene–disease, gene–phenotype | `genes_to_disease` (~3.5 per gene), not `genes_to_phenotype` (~78 per gene, mostly propagated ancestors) | https://github.com/obophenotype/human-phenotype-ontology/releases |
 | DISEASES | disease–gene | confidence cutoff for the text-mining channel; the knowledge and experiments channels are bounded as they are | https://diseases.jensenlab.org/Downloads |
-| CTD | chemical–gene, chemical–disease, chemical–pathway | ~3.8M curated chemical–gene interactions, so needs filtering by organism and interaction action. The terms of use do not say whether a derived file may be redistributed | https://ctdbase.org/downloads |
-| Open Targets | target–disease | CC0 and quarterly, but 17M associations, so it needs a score threshold that can be defended | https://platform.opentargets.org/downloads |
-| miRTarBase | microRNA–target gene | the strong-evidence subset (reporter assay, Western blot), not the full 3.8M | https://awi.cuhk.edu.cn/miRTarBase/ |
-| TarBase | microRNA–target gene | CC BY 4.0, better licensed than miRTarBase; filter to the low-throughput methods | https://dianalab.e-ce.uth.gr/tarbasev9 |
-| TransmiR | transcription factor–microRNA | the literature-curated tier (~5k pairs), not the ChIP-seq or motif-predicted tiers | https://www.cuilab.cn/transmir |
 
-### Not worth a workflow
 
-These release rarely or not at all, so a schedule gains nothing over a one-off.
-Still worth building by hand if wanted.
-
-| Database | Interactions | Last release |
-| --- | --- | --- |--- |
-
-| TRRUST | transcription factor–target | 2018 |
-| CollecTRI | transcription factor–target | 2023 |
-| CORUM | protein complex–component | 2024 |
-| HuRI | binary protein–protein | 2020 |
-| BioPlex | protein–protein, one cell line | 2021 |
-| SIDER | drug–side effect | 2015 |
-
-### Too large
-
-Too many edges per gene to be useful. The figure is what rules each one out.
-
-| Database | Interactions | Size |
-| --- | --- | --- |
-| IntAct, BioGRID | protein–protein | ~848k interactions in full; IntAct needs MI > 0.6 |
-| RegNetwork | transcription factor–target | 11M interactions |
-| hTFtarget | transcription factor–target | 3.2M regulations |
-| miRDB, TargetScan | predicted microRNA–target | 500–600 targets per microRNA |
-| CellMarker | cell type–marker gene | ~32 cell types per gene |
-| InterPro, Pfam | protein family–gene | several domains per gene |
-| Rhea | enzyme–reaction | several reactions per enzyme |
-
-### Ontologies
-
-Annotations propagate up the tree, so a gene arrives carrying its whole branch.
-Dropping the ancestors instead loses the term-to-term relations, which a linkset
-cannot express anyway. That, not file size, is why the GO linkset went, and a
-slim does not fix it. Reactome shows the scale: the same 11,788 human genes give
-54k edges from `NCBI2Reactome.txt` and 160k from `_All_Levels`, which is why the
-pipeline reads the first. HPO and Bgee are the same shape.
-
-### Assessed, not queued
-
-Looked at and not taken further, recorded so the assessment is not repeated.
-
-| Database | Interactions | Why not |
-| --- | --- | --- |
-| STRING | functional association | Cytoscape's stringApp already extends a network from STRING, so a linkset would duplicate tooling that exists |
-| OmniPath | aggregated signalling | no single bulk file, and the license varies by contributing resource |
-| DGIdb | drug–gene | aggregates 44 sources under differing licenses, so provenance would have to be tracked per edge |
-| DrugCentral | drug–target | CC BY-SA and usable, but overlaps ChEMBL and Guide to PHARMACOLOGY |
-| Probes & Drugs | compound–target | aggregate; the license follows its sources |
-| PharmGKB | variant–drug | pharmacogenetic variants rather than drug–target |
-| ToxCast, Tox21 | chemical–assay | public domain, but assay-centric; no clean chemical–gene table without mapping work |
-| EPA CompTox | chemical properties | chemical library, no gene links |
-| eNanoMapper | nanomaterial properties | ontology, no gene links |
-| GWAS Catalog | trait–variant | the trait-to-gene step is a choice the source does not make |
-| ClinVar | gene–condition | `gene_condition_source_id` is bounded, but overlaps Orphanet and OMIM |
-| ClinGen | gene–disease validity | expert-curated and small, ~3.3k curations |
-| CIViC | variant–cancer evidence | CC0 and bounded, but variant-level and cancer-only |
-| MGI, RGD | gene–phenotype | mouse and rat phenotype; revisit if a non-human disease linkset is wanted |
-| Human Protein Atlas | gene–tissue, gene–cell type | CC BY 4.0, but needs the enriched classification rather than all expression calls |
-| Bgee | gene–anatomy | UBERON anatomy is hierarchical, so it needs a tissue subset chosen first |
-| MSigDB Hallmark | gene–gene set | 50 sets and bounded, but MSigDB collections differ in license and not all are open |
-| PathBank, SMPDB | gene–pathway | CC BY 4.0, but overlaps WikiPathways and Reactome, and currency is unclear |
-| InnateDB | protein–protein | curated but narrow, innate immunity only |
-| PanglaoDB | cell type–marker gene | CC0, but currency unclear |
-| Ensembl Compara, OrthoDB, eggNOG, OMA, NCBI HomoloGene | gene–ortholog | homology linksets are not wanted. Ensembl one-to-one orthologs would be bounded and cheap to build (15.8k pairs for human–rat), so this is a scope decision rather than a technical one |
-| ChEA3, GTRD, miRNet | transcription factor, microRNA | web tools, no bulk interaction table |
-| JASPAR | binding motifs | motif profiles; targets come from scanning, not measurement |
-| SCENIC | inferred regulons | a method, not a database |
-| RNAcentral | ncRNA sequences | sequence reference, not interactions |
 
 ## License limitation
 
