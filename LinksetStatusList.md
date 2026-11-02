@@ -14,19 +14,19 @@ rather than being repeated here.
 
 ## Complete automation
 
-| Resource | Interactions | Workflow | Deposit | Lastest version
-| --- | --- | --- | --- | --- |
-| [WikiPathways](https://www.wikipathways.org) | pathway–gene, 13 species | [`create-linkset-wikipathways.yml`](.github/workflows/create-linkset-wikipathways.yml) | [WikiPathways Linksets](https://zenodo.org/records/21806899) | Version 20260710 |
-| [TFLink](https://tflink.net) | transcription factor–target gene, 5 species | [`create-linkset-tflink.yml`](.github/workflows/create-linkset-tflink.yml) | [TFLink Linksets](https://zenodo.org/records/21804829) | Version v1.0-SS |
+| Resource | Interactions | Workflow | Deposit | Lastest version | License
+| --- | --- | --- | --- | --- |--- |
+| [WikiPathways](https://www.wikipathways.org) | pathway–gene, 13 species | [`create-linkset-wikipathways.yml`](.github/workflows/create-linkset-wikipathways.yml) | [WikiPathways Linksets](https://zenodo.org/records/21806899) | Version 20260710 | [`CC0`](https://creativecommons.org/2008/04/16/cc0-betadiscussion-draft-2/) 
+| [TFLink](https://tflink.net) | transcription factor–target gene, 5 species | [`create-linkset-tflink.yml`](.github/workflows/create-linkset-tflink.yml) | [TFLink Linksets](https://zenodo.org/records/21804829) | Version v1.0-SS | [`CC BY-NC 4.0`](https://creativecommons.org/licenses/by-nc/4.0/)|
 
 ## Automated, not yet deposited
 
 The linkset generation is complete, but not yet deposited on Zenodo.
 
-| Resource | Interactions | Workflow | Outstanding |
-| --- | --- | --- | --- |
-| [Orphanet](https://www.orphadata.com/) | gene–rare disease | [`Create_OrphanetLinkset.yml`](.github/workflows/Create_OrphanetLinkset.yml) | [`Orphanet/readme.md`](Orphanet/readme.md) |
-| [ChEMBL](https://www.ebi.ac.uk/chembl/) | compound–protein target (mechanism of action) | [`Chembl_MoA.yml`](.github/workflows/Chembl_MoA.yml) | [`CHEMBL/readme.md`](CHEMBL/readme.md) |
+| Resource | Interactions | Workflow | Outstanding | Lastest version | License | 
+| --- | --- | --- | --- | --- |--- |
+| [Orphanet](https://www.orphadata.com/) | gene–rare disease | [`Create_OrphanetLinkset.yml`](.github/workflows/Create_OrphanetLinkset.yml) | [`Orphanet/readme.md`](Orphanet/readme.md) | July 2026 | [`CC BY 4.0`](https://creativecommons.org/licenses/by/4.0/deed.en) |
+| [ChEMBL](https://www.ebi.ac.uk/chembl/) | compound–protein target (mechanism of action) | [`Chembl_MoA.yml`](.github/workflows/Chembl_MoA.yml) | [`CHEMBL/readme.md`](CHEMBL/readme.md) | 2026 | [`CC0`](https://creativecommons.org/2008/04/16/cc0-betadiscussion-draft-2/) | 
 | [Reactome](https://reactome.org/) | pathway–gene, human | [`create-linkset-reactome.yml`](.github/workflows/create-linkset-reactome.yml) | Zenodo bootstrap; whether orthology-inferred species should ship |
 | [AOP-Wiki](https://aopwiki.org/) | key event–gene (text-mined), chemical stressor–molecular initiating event | [`create-linkset-aopwiki.yml`](.github/workflows/create-linkset-aopwiki.yml) | Zenodo bootstrap |
 | [SIGNOR](https://signor.uniroma2.it/) | protein–protein causal signalling, human | [`create-linkset-signor.yml`](.github/workflows/create-linkset-signor.yml) | Zenodo bootstrap; chemical–protein waits on [linksetCreator#5](https://github.com/CyTargetLinker/linksetCreator/issues/5) |
