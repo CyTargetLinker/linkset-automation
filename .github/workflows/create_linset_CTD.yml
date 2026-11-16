@@ -4,14 +4,9 @@ on:
   workflow_dispatch:
     inputs:
       version:
-        description: "CTD snapshot "
+        description: "CTD snapshot date (YYYY-MM-DD; default: today's date)"
         required: false
         type: string
-      skip_species:
-        description: "Build and QC only; publishing is not configured in this workflow"
-        required: false
-        type: boolean
-        default: true
 
 permissions:
   contents: read
@@ -39,6 +34,9 @@ jobs:
         with:
           python-version: "3.x"
 
+      - name: Install Python dependency
+        run: python3 -m pip install requests
+
       - name: Restore linkset-creator jar from cache
         uses: actions/cache@v6
         id: cache-jar
@@ -52,39 +50,73 @@ jobs:
           wget -O linkset-creator-v2.0.jar \
             https://github.com/CyTargetLinker/linksetCreator/releases/download/v2.0/linkset-creator-v2.0.jar
 
-      # CTD.py reads CTD/species.tsv and CTD/input/CTD_<date>_<input_token>.txt,
-      # creates build/ctd/input_<code>.txt, a per-species config, and a manifest.
-      - name: Prepare CTD inputs and configs
+      # CTD.py downloads CTD_chem_gene_ixns.csv.gz and creates one dated TXT
+      # file per configured species under CTD_outputs/.
+      - name: Download and split CTD by species
         env:
           CTD_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          args=()
           if [ -n "$CTD_VERSION" ]; then
-            args+=(--version "$CTD_VERSION")
+            python3 CTD/CTD.py --date "$CTD_VERSION"
+          else
+            python3 CTD/CTD.py
           fi
-          python3 CTD/ctd.py prepare "${args[@]}"
-          echo "CTD_VERSION=$(cat build/ctd/version.txt)" >> "$GITHUB_ENV"
-          cat build/ctd/manifest.json
+          if [ -z "$CTD_VERSION" ]; then
+            CTD_VERSION=$(date -u +%Y-%m-%d)
+          fi
+          echo "CTD_VERSION=$CTD_VERSION" >> "$GITHUB_ENV"
+          ls -lh CTD_outputs/
 
-      # The CTD preprocessor generates configs in CTD/config by default.
-      # If the repository stores/uses CTD_config instead, change this config
-      # path in CTD.py or point the build command there consistently.
-      - name: Build CTD XGMML files and run QC
+      # CTD_config contains the committed, species-specific linkset-creator
+      # configs (e.g. CTD_config/CTD_cel.config). The manifest ties each
+      # species code to its dated input, config and XGMML output.
+      - name: Build each CTD species linkset and run QC
+        env:
+          CTD_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          python3 CTD/ctd.py build --jar linkset-creator-v2.0.jar
-          mkdir -p build/ctd/xgmml
-          while IFS= read -r output; do
-            mv "$output" build/ctd/xgmml/
-          done < <(python3 -c 'import json; m=json.load(open("build/ctd/manifest.json")); print("\n".join(s["output"] for s in m["species"]))')
-          ls -lh build/ctd/xgmml/
+          if [ -z "$CTD_VERSION" ]; then
+            CTD_VERSION=$(date -u +%Y-%m-%d)
+          fi
+          mkdir -p build/ctd
+          printf 'code\tinput\tconfig\toutput\n' > build/ctd/manifest.tsv
+
+          for code in cel dre gga hsa mmu; do
+            case "$code" in
+              cel) species=caenorhabditis_elegans ;;
+              dre) species=danio_rerio ;;
+              gga) species=gallus_gallus ;;
+              hsa) species=homo_sapiens ;;
+              mmu) species=mus_musculus ;;
+            esac
+
+            input="CTD_outputs/CTD_${CTD_VERSION}_${species}.txt"
+            config="CTD/CTD_config/CTD_${code}.config"
+            output="CTD_${code}_${CTD_VERSION}.xgmml"
+            test -s "$input" || { echo "Missing or empty input: $input"; exit 1; }
+            test -s "$config" || { echo "Missing config: $config"; exit 1; }
+
+            echo "Building $species using $config"
+            java -Dfile.encoding=UTF-8 -jar linkset-creator-v2.0.jar \
+              -c "$config" -i "$input" -o "$output"
+
+            python3 scripts/qc_xgmml.py \
+              --min-nodes 1 --min-edges 1 \
+              --mapped-type gene --min-mapped-frac 0.80 \
+              --labelled-type gene \
+              "$output"
+
+            printf '%s\t%s\t%s\t%s\n' "$code" "$input" "$config" "$output" \
+              >> build/ctd/manifest.tsv
+          done
+
+          cat build/ctd/manifest.tsv
 
       - name: Upload CTD XGMML artifacts
         uses: actions/upload-artifact@v7
         with:
           name: CTD-linksets-${{ env.CTD_VERSION }}
           path: |
-            build/ctd/xgmml/*.xgmml
-            build/ctd/manifest.json
-            build/ctd/version.txt
+            CTD_*_${{ env.CTD_VERSION }}.xgmml
+            build/ctd/manifest.tsv
