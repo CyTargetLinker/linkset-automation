@@ -1,4 +1,4 @@
-name: Create ChEMBL linkset
+name: Create ChEMBL MoA linkset
 
 on:
   workflow_dispatch:
