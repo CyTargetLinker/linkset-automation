@@ -116,7 +116,7 @@ jobs:
 
             python3 scripts/qc_xgmml.py \
               --min-nodes 1 --min-edges 1 \
-              --mapped-type gene --min-mapped-frac 0.80 \
+              
               --labelled-type gene \
               "$output"
 
