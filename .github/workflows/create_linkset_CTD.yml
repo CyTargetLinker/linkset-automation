@@ -115,8 +115,8 @@ jobs:
               -c "$config" -i "$input" -o "$output"
 
             python3 scripts/qc_xgmml.py \
-              --min-nodes 1 --min-edges 1 \
-              
+              --min-nodes 1 \
+              --min-edges 1 \
               --labelled-type gene \
               "$output"
 
