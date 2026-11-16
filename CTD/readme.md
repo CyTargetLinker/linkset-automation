@@ -6,4 +6,4 @@ Records are grouped by chemical ID and gene ID. For each pair, the script combin
 
 reference:
 
-Davis AP, Wiegers TC, Sciaky D, Barkalow F, Wyatt B, Wiegers J, McMorran R, Abrar S, Mattingly CJ Comparative Toxicogenomics Database: update 2027. Nucleic Acids Res 2026 Oct 23
+Allan Peter Davis, Thomas C Wiegers, Daniela Sciaky, Fern Barkalow, Melissa Strong, Brent Wyatt, Jolene Wiegers, Roy McMorran, Sakib Abrar, Carolyn J Mattingly, Comparative Toxicogenomics Database’s 20th anniversary: update 2025, Nucleic Acids Research, Volume 53, Issue D1, 6 January 2025, Pages D1328–D1334, https://doi.org/10.1093/nar/gkae883
