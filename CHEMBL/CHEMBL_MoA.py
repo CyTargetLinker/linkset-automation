@@ -70,10 +70,16 @@ def download_all_mechanism_data(limit_compounds=None, human_only=False, tqdm_cla
     # ── 1. Get mechanisms ──────────────────────────────────────────────
     print("1. Getting mechanisms...")
     try:
+        all_mechanisms_list = list(mechanism.filter())
         if human_only:
-            all_mechanisms_list = list(mechanism.filter(target_organism='Homo sapiens'))
-        else:
-            all_mechanisms_list = list(mechanism.filter())
+            human_target_ids = {
+                t['target_chembl_id']
+                for t in target.filter(organism='Homo sapiens').only(['target_chembl_id'])
+            }
+            all_mechanisms_list = [
+                m for m in all_mechanisms_list
+                if m.get('target_chembl_id') in human_target_ids
+            ]
         print(f"Found {len(all_mechanisms_list)} mechanisms")
     except Exception as e:
         print(f"Error: {e}")
