@@ -50,6 +50,9 @@ jobs:
           wget -O linkset-creator-v2.0.jar \
             https://github.com/CyTargetLinker/linksetCreator/releases/download/v2.0/linkset-creator-v2.0.jar
 
+      - name: Install jq
+        run: sudo apt-get update && sudo apt-get install -y jq
+
       # CTD.py downloads CTD_chem_gene_ixns.csv.gz and creates one dated TXT
       # file per configured species under CTD_outputs/.
       - name: Download and split CTD by species
@@ -76,28 +79,38 @@ jobs:
           CTD_VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
+          mkdir -p bridgedb
+          curl --fail --silent --show-error --location --retry 5 --retry-delay 5 \
+            https://raw.githubusercontent.com/bridgedb/data/main/gene.json \
+            -o build_gene.json
           if [ -z "$CTD_VERSION" ]; then
             CTD_VERSION=$(date -u +%Y-%m-%d)
           fi
           mkdir -p build/ctd
-          printf 'code\tinput\tconfig\toutput\n' > build/ctd/manifest.tsv
+          printf 'code\torganism\tbridge_species\tinput\tconfig\toutput\n' > build/ctd/manifest.tsv
 
-          for code in cel dre gga hsa mmu; do
-            case "$code" in
-              cel) species=caenorhabditis_elegans ;;
-              dre) species=danio_rerio ;;
-              gga) species=gallus_gallus ;;
-              hsa) species=homo_sapiens ;;
-              mmu) species=mus_musculus ;;
-            esac
+          while IFS='|' read -r code token organism bridge_species syscodes; do
+            [ -z "$code" ] && continue
+            echo "::group::Building $organism ($code)"
+            bridge_url=$(jq -r --arg organism "$bridge_species" \
+              '.mappingFiles[] | select(.species == $organism) | .downloadURL' \
+              build_gene.json)
+            if [ -z "$bridge_url" ] || [ "$bridge_url" = "null" ]; then
+              echo "No BridgeDb mapping file found for '$bridge_species'"
+              exit 1
+            fi
 
-            input="CTD_outputs/CTD_${CTD_VERSION}_${species}.txt"
+            # CTD configs map GeneID (NCBI Entrez) on the target side.
+            # All five configured species use their short-code bridge path.
+            scripts/fetch-bridge.sh "$bridge_url" "bridgedb/${code}.bridge"
+
+            input="CTD_outputs/CTD_${CTD_VERSION}_${token}.txt"
             config="CTD/CTD_config/CTD_${code}.config"
             output="CTD_${code}_${CTD_VERSION}.xgmml"
             test -s "$input" || { echo "Missing or empty input: $input"; exit 1; }
             test -s "$config" || { echo "Missing config: $config"; exit 1; }
 
-            echo "Building $species using $config"
+            echo "Building $organism using $config"
             java -Dfile.encoding=UTF-8 -jar linkset-creator-v2.0.jar \
               -c "$config" -i "$input" -o "$output"
 
@@ -107,9 +120,18 @@ jobs:
               --labelled-type gene \
               "$output"
 
-            printf '%s\t%s\t%s\t%s\n' "$code" "$input" "$config" "$output" \
+            printf '%s\t%s\t%s\t%s\t%s\t%s\n' \
+              "$code" "$organism" "$bridge_species" "$input" "$config" "$output" \
               >> build/ctd/manifest.tsv
-          done
+            rm -f "bridgedb/${code}.bridge"
+            echo "::endgroup::"
+          done <<'SPECIES'
+          cel|caenorhabditis_elegans|Caenorhabditis elegans|Caenorhabditis elegans|En,L,S
+          dre|danio_rerio|Danio rerio|Danio rerio|En,L,S
+          gga|gallus_gallus|Gallus gallus|Gallus gallus|En,L,S
+          hsa|homo_sapiens|Homo sapiens|Homo sapiens|En,H,L,S
+          mmu|mus_musculus|Mus musculus|Mus musculus|En,L,S
+          SPECIES
 
           cat build/ctd/manifest.tsv
 
