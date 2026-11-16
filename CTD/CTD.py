@@ -13,13 +13,11 @@ OUTPUT_DIR = Path("CTD_outputs")
 DATE = datetime.now().strftime("%Y-%m-%d")
 
 SPECIES = {
-    "bos indicus": "bos_indicus",
     "caenorhabditis elegans": "caenorhabditis_elegans",
     "danio rerio": "danio_rerio",
     "gallus gallus": "gallus_gallus",
     "homo sapiens": "homo_sapiens",
     "mus musculus": "mus_musculus",
-    "oryctolagus cuniculus": "oryctolagus_cuniculus",
 }
 
 COLUMNS = [
