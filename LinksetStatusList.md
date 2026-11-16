@@ -30,6 +30,7 @@ The linkset generation is complete, but not yet deposited on Zenodo.
 | [Reactome](https://reactome.org/) | pathway–gene, human | [`create-linkset-reactome.yml`](.github/workflows/create-linkset-reactome.yml) | Zenodo bootstrap; whether orthology-inferred species should ship |  Na | [`CC BY 4.0`](https://creativecommons.org/licenses/by/4.0/deed.en) |
 | [AOP-Wiki](https://aopwiki.org/) | key event–gene (text-mined), chemical stressor–molecular initiating event | [`create-linkset-aopwiki.yml`](.github/workflows/create-linkset-aopwiki.yml) | Zenodo bootstrap |  Na| [`CC BY-SA`](https://creativecommons.org/licenses/by-sa/2.0/)
 | [SIGNOR](https://signor.uniroma2.it/) | protein–protein causal signalling, human | [`create-linkset-signor.yml`](.github/workflows/create-linkset-signor.yml) | Zenodo bootstrap; chemical–protein waits on [linksetCreator#5](https://github.com/CyTargetLinker/linksetCreator/issues/5) | Na | Na |
+| [CTD](https://ctdbase.org/) | November 2026 | [`create-linkset-CTD.yml`](.github/workflows/create-linkset-CTD.yml) | [`CTD/readme.md`](CTD/readme.md),Zenodo bootstrap | Na | written permission |
 
 ## Candidates
 
